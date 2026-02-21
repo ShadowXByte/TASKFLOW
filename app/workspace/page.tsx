@@ -581,7 +581,7 @@ function WorkspaceContent() {
 
   return (
     <main
-      className={`min-h-screen px-6 py-8 md:px-10 md:py-10 ${
+      className={`min-h-screen overflow-x-hidden px-4 py-6 md:px-10 md:py-10 ${
         darkMode
           ? "bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100"
           : "bg-gradient-to-br from-slate-50 via-white to-blue-50"
@@ -589,7 +589,7 @@ function WorkspaceContent() {
     >
       <div className="mx-auto w-full max-w-7xl space-y-6">
         <header
-          className={`rounded-3xl p-6 shadow-lg backdrop-blur-md border md:p-8 ${
+          className={`rounded-3xl p-4 shadow-lg backdrop-blur-md border md:p-8 ${
             darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
           }`}
         >
@@ -750,7 +750,7 @@ function WorkspaceContent() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
             <section
-              className={`rounded-3xl p-6 backdrop-blur-md border shadow-lg md:p-8 ${
+              className={`rounded-3xl p-4 backdrop-blur-md border shadow-lg md:p-8 ${
                 darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
               }`}
             >
@@ -981,7 +981,7 @@ function WorkspaceContent() {
                             </button>
                           </div>
                         ) : (
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <p
@@ -999,7 +999,7 @@ function WorkspaceContent() {
                                 📅 {formatDisplayDate(task.dueDate)} at {task.dueTime} {isOverdue ? "• OVERDUE" : ""}
                               </p>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <button
                                 onClick={() => toggleTask(task.id, task.completed)}
                                 className="rounded-lg bg-emerald-100/60 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
@@ -1030,7 +1030,7 @@ function WorkspaceContent() {
               </ul>
             </section>
 
-            <section className="rounded-3xl bg-white/40 p-6 backdrop-blur-md border border-white/50 shadow-lg md:p-8">
+            <section className="rounded-3xl bg-white/40 p-4 backdrop-blur-md border border-white/50 shadow-lg md:p-8">
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
                 <div className="flex items-center gap-2">
@@ -1040,7 +1040,7 @@ function WorkspaceContent() {
                   >
                     ← Prev
                   </button>
-                  <p className="min-w-40 text-center text-sm font-bold text-slate-900">{monthTitle}</p>
+                  <p className="min-w-28 text-center text-sm font-bold text-slate-900 sm:min-w-40">{monthTitle}</p>
                   <button
                     onClick={goToNextMonth}
                     className="rounded-lg bg-white/50 border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white/70"
@@ -1050,13 +1050,13 @@ function WorkspaceContent() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold uppercase tracking-wider text-blue-600 mb-3">
+              <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-2 sm:mb-3 sm:gap-2 sm:text-xs">
                 {WEEKDAYS.map((day) => (
                   <div key={day}>{day}</div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-2 mb-6">
+              <div className="grid grid-cols-7 gap-1 mb-6 sm:gap-2">
                 {calendarCells.map((day) => {
                   const dayKey = toDateInputValue(day);
                   const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
@@ -1067,7 +1067,7 @@ function WorkspaceContent() {
                     <button
                       key={dayKey}
                       onClick={() => setSelectedDate(dayKey)}
-                      className={`rounded-lg p-2.5 text-left text-sm font-semibold transition ${
+                      className={`rounded-lg p-1.5 text-left text-xs font-semibold transition sm:p-2.5 sm:text-sm ${
                         isSelected
                           ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
                           : "bg-white/50 text-slate-900 border border-slate-200/50 hover:bg-white/80"
@@ -1075,7 +1075,7 @@ function WorkspaceContent() {
                     >
                       <div>{day.getDate()}</div>
                       {dueCount > 0 && (
-                        <div className="mt-1 text-[10px] font-bold opacity-80">
+                        <div className="mt-1 text-[9px] font-bold opacity-80 sm:text-[10px]">
                           {dueCount}·
                         </div>
                       )}
