@@ -64,6 +64,7 @@ model Task {
   id        Int      @id @default(autoincrement())
   title     String
   dueDate   String
+  dueTime   String   @default("09:00")
   completed Boolean  @default(false)
   priority  TaskPriority @default(MEDIUM)
   createdAt DateTime @default(now())

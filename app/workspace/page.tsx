@@ -11,6 +11,7 @@ type Task = {
   id: number;
   title: string;
   dueDate: string;
+  dueTime: string;
   completed: boolean;
   priority: TaskPriority;
 };
@@ -25,6 +26,8 @@ type AuthTab = "login" | "register";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const GUEST_TASKS_KEY = "taskflow_guest_tasks";
 const THEME_KEY = "taskflow_theme";
+const NOTIFICATION_ASKED_KEY = "taskflow_notifications_asked";
+const NOTIFIED_TASKS_KEY = "taskflow_notified_tasks";
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 
 const toDateInputValue = (date: Date) => {
@@ -32,6 +35,12 @@ const toDateInputValue = (date: Date) => {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+};
+
+const toTimeInputValue = (date: Date) => {
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  return `${hours}:${minutes}`;
 };
 
 const formatDisplayDate = (value: string) => {
@@ -63,6 +72,8 @@ const parseDisplayDate = (value: string) => {
   return iso;
 };
 
+const isValidTime = (value: string) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+
 const readGuestTasks = (): Task[] => {
   if (typeof window === "undefined") {
     return [];
@@ -91,6 +102,7 @@ const readGuestTasks = (): Task[] => {
         id: task.id,
         title: task.title,
         dueDate: task.dueDate,
+        dueTime: typeof task.dueTime === "string" && isValidTime(task.dueTime) ? task.dueTime : "09:00",
         completed: task.completed,
         priority: task.priority === "LOW" || task.priority === "MEDIUM" || task.priority === "HIGH"
           ? task.priority
@@ -125,13 +137,16 @@ function WorkspaceContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
   const [dueDateInput, setDueDateInput] = useState(formatDisplayDate(today));
+  const [dueTimeInput, setDueTimeInput] = useState("09:00");
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [search, setSearch] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDueDateInput, setEditDueDateInput] = useState(formatDisplayDate(today));
+  const [editDueTimeInput, setEditDueTimeInput] = useState("09:00");
   const [editPriority, setEditPriority] = useState<TaskPriority>("MEDIUM");
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const [darkMode, setDarkMode] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -166,6 +181,23 @@ function WorkspaceContent() {
   }, [darkMode]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+
+    setNotificationPermission(Notification.permission);
+
+    const asked = localStorage.getItem(NOTIFICATION_ASKED_KEY);
+    if (!asked && Notification.permission === "default") {
+      localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
+      void Notification.requestPermission().then((permission) => {
+        setNotificationPermission(permission);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     const loadTasks = async () => {
       if (workspaceMode === "guest") {
         setTasks(readGuestTasks());
@@ -192,6 +224,45 @@ function WorkspaceContent() {
     void loadTasks();
   }, [workspaceMode, status]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || notificationPermission !== "granted") {
+      return;
+    }
+
+    const tick = () => {
+      const raw = localStorage.getItem(NOTIFIED_TASKS_KEY);
+      const notifiedSet = new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+      const now = Date.now();
+
+      for (const task of tasks) {
+        if (task.completed || !isValidTime(task.dueTime)) {
+          continue;
+        }
+
+        const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime}:00`).getTime();
+        if (Number.isNaN(dueTimestamp)) {
+          continue;
+        }
+
+        const notifyKey = `${workspaceMode}:${task.id}:${task.dueDate}:${task.dueTime}`;
+        const shouldNotify = now >= dueTimestamp && now - dueTimestamp < 6 * 60 * 60 * 1000;
+
+        if (shouldNotify && !notifiedSet.has(notifyKey)) {
+          const title = `Task Due: ${task.title}`;
+          const body = `Due at ${task.dueTime} on ${formatDisplayDate(task.dueDate)}`;
+          new Notification(title, { body });
+          notifiedSet.add(notifyKey);
+        }
+      }
+
+      localStorage.setItem(NOTIFIED_TASKS_KEY, JSON.stringify(Array.from(notifiedSet).slice(-500)));
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 30000);
+    return () => window.clearInterval(interval);
+  }, [tasks, workspaceMode, notificationPermission]);
+
   const calendarCells = useMemo(() => {
     const firstDay = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
     const start = new Date(firstDay);
@@ -213,20 +284,23 @@ function WorkspaceContent() {
   }, [tasks]);
 
   const tasksForSelectedDay = useMemo(
-    () => tasks.filter((task) => task.dueDate === selectedDate),
+    () => tasks.filter((task) => task.dueDate === selectedDate).slice().sort((a, b) => a.dueTime.localeCompare(b.dueTime)),
     [tasks, selectedDate],
   );
 
   const filteredTasks = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
+    const now = Date.now();
 
     return tasks.filter((task) => {
-      const isOverdue = !task.completed && task.dueDate < today;
+      const taskTimestamp = new Date(`${task.dueDate}T${task.dueTime}:00`).getTime();
+      const isOverdue = !task.completed && !Number.isNaN(taskTimestamp) && taskTimestamp < now;
+      const isUpcoming = !task.completed && !Number.isNaN(taskTimestamp) && taskTimestamp >= now;
 
       const matchesFilter =
         filter === "all" ||
         (filter === "today" && task.dueDate === today) ||
-        (filter === "upcoming" && task.dueDate > today && !task.completed) ||
+        (filter === "upcoming" && isUpcoming) ||
         (filter === "completed" && task.completed) ||
         (filter === "overdue" && isOverdue);
 
@@ -237,7 +311,10 @@ function WorkspaceContent() {
   }, [tasks, filter, search, today]);
 
   const sortedTasks = useMemo(
-    () => filteredTasks.slice().sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    () =>
+      filteredTasks
+        .slice()
+        .sort((a, b) => (a.dueDate === b.dueDate ? a.dueTime.localeCompare(b.dueTime) : a.dueDate.localeCompare(b.dueDate))),
     [filteredTasks],
   );
 
@@ -293,7 +370,7 @@ function WorkspaceContent() {
     }
 
     const parsedDueDate = parseDisplayDate(dueDateInput);
-    if (!parsedDueDate) {
+    if (!parsedDueDate || !isValidTime(dueTimeInput)) {
       return;
     }
 
@@ -302,6 +379,7 @@ function WorkspaceContent() {
         id: Date.now(),
         title: cleanTitle,
         dueDate: parsedDueDate,
+        dueTime: dueTimeInput,
         completed: false,
         priority,
       };
@@ -309,6 +387,7 @@ function WorkspaceContent() {
       setTasks(nextTasks);
       writeGuestTasks(nextTasks);
       setTitle("");
+      setDueTimeInput("09:00");
       setPriority("MEDIUM");
       return;
     }
@@ -316,7 +395,7 @@ function WorkspaceContent() {
     const response = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: cleanTitle, dueDate: parsedDueDate, priority }),
+      body: JSON.stringify({ title: cleanTitle, dueDate: parsedDueDate, dueTime: dueTimeInput, priority }),
     });
 
     if (!response.ok) {
@@ -326,6 +405,7 @@ function WorkspaceContent() {
     const created = (await response.json()) as Task;
     setTasks((current) => [...current, created]);
     setTitle("");
+    setDueTimeInput("09:00");
     setPriority("MEDIUM");
   };
 
@@ -333,6 +413,7 @@ function WorkspaceContent() {
     setEditingTaskId(task.id);
     setEditTitle(task.title);
     setEditDueDateInput(formatDisplayDate(task.dueDate));
+    setEditDueTimeInput(task.dueTime);
     setEditPriority(task.priority);
   };
 
@@ -340,20 +421,27 @@ function WorkspaceContent() {
     setEditingTaskId(null);
     setEditTitle("");
     setEditDueDateInput(formatDisplayDate(today));
+    setEditDueTimeInput("09:00");
     setEditPriority("MEDIUM");
   };
 
   const saveTaskEdit = async (taskId: number) => {
     const cleanTitle = editTitle.trim();
     const parsedEditDueDate = parseDisplayDate(editDueDateInput);
-    if (!cleanTitle || !parsedEditDueDate) {
+    if (!cleanTitle || !parsedEditDueDate || !isValidTime(editDueTimeInput)) {
       return;
     }
 
     if (workspaceMode === "guest") {
       const nextTasks = tasks.map((task) =>
         task.id === taskId
-          ? { ...task, title: cleanTitle, dueDate: parsedEditDueDate, priority: editPriority }
+          ? {
+              ...task,
+              title: cleanTitle,
+              dueDate: parsedEditDueDate,
+              dueTime: editDueTimeInput,
+              priority: editPriority,
+            }
           : task,
       );
       setTasks(nextTasks);
@@ -365,7 +453,12 @@ function WorkspaceContent() {
     const response = await fetch(`/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: cleanTitle, dueDate: parsedEditDueDate, priority: editPriority }),
+      body: JSON.stringify({
+        title: cleanTitle,
+        dueDate: parsedEditDueDate,
+        dueTime: editDueTimeInput,
+        priority: editPriority,
+      }),
     });
 
     if (!response.ok) {
@@ -475,6 +568,17 @@ function WorkspaceContent() {
     picker.focus();
   };
 
+  const requestNotificationPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      return;
+    }
+
+    localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  };
+
   return (
     <main
       className={`min-h-screen px-6 py-8 md:px-10 md:py-10 ${
@@ -540,6 +644,22 @@ function WorkspaceContent() {
               >
                 {darkMode ? "☀️ Light" : "🌙 Dark"}
               </button>
+              <button
+                onClick={() => void requestNotificationPermission()}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold border transition ${
+                  darkMode
+                    ? "bg-white/10 text-slate-100 border-white/20 hover:bg-white/20"
+                    : "bg-white/50 text-slate-900 border-white/50 hover:bg-white/70"
+                }`}
+              >
+                {notificationPermission === "granted"
+                  ? "🔔 Notifications On"
+                  : notificationPermission === "denied"
+                    ? "🔕 Notifications Blocked"
+                    : notificationPermission === "unsupported"
+                      ? "🔕 Notifications N/A"
+                      : "🔔 Enable Notifications"}
+              </button>
               {workspaceMode === "account" && status === "authenticated" && (
                 <button
                   onClick={() => signOut({ callbackUrl: "/workspace?mode=account" })}
@@ -556,6 +676,9 @@ function WorkspaceContent() {
               : status === "authenticated"
                 ? `🔐 Synced account: ${session?.user?.email}`
                 : "Sign in to sync your tasks across devices."}
+          </p>
+          <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Tasks are ordered by date and time. Notifications include the task name when due.
           </p>
         </header>
 
@@ -647,7 +770,7 @@ function WorkspaceContent() {
                       : "border-slate-200 bg-white/70 text-slate-900"
                   }`}
                 />
-                <div className="grid gap-2 md:grid-cols-[1fr_160px_auto]">
+                <div className="grid gap-2 md:grid-cols-[1fr_130px_130px_auto]">
                   <div className="relative">
                     <input
                       type="text"
@@ -696,6 +819,16 @@ function WorkspaceContent() {
                       </option>
                     ))}
                   </select>
+                  <input
+                    type="time"
+                    value={dueTimeInput}
+                    onChange={(event) => setDueTimeInput(event.target.value)}
+                    className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                        : "border-slate-200 bg-white/70 text-slate-900"
+                    }`}
+                  />
                   <button
                     onClick={addTask}
                     className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:shadow-xl"
@@ -753,7 +886,8 @@ function WorkspaceContent() {
                 ) : (
                   sortedTasks.map((task) => {
                     const isEditing = editingTaskId === task.id;
-                    const isOverdue = !task.completed && task.dueDate < today;
+                    const taskTimestamp = new Date(`${task.dueDate}T${task.dueTime}:00`).getTime();
+                    const isOverdue = !task.completed && !Number.isNaN(taskTimestamp) && taskTimestamp < Date.now();
 
                     return (
                       <li
@@ -765,7 +899,7 @@ function WorkspaceContent() {
                         } ${isOverdue ? "ring-1 ring-red-400/60" : ""}`}
                       >
                         {isEditing ? (
-                          <div className="grid gap-2 md:grid-cols-[1fr_160px_140px_auto_auto]">
+                          <div className="grid gap-2 md:grid-cols-[1fr_160px_110px_130px_auto_auto]">
                             <input
                               value={editTitle}
                               onChange={(event) => setEditTitle(event.target.value)}
@@ -823,6 +957,16 @@ function WorkspaceContent() {
                                 </option>
                               ))}
                             </select>
+                            <input
+                              type="time"
+                              value={editDueTimeInput}
+                              onChange={(event) => setEditDueTimeInput(event.target.value)}
+                              className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                darkMode
+                                  ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                                  : "border-slate-200 bg-white text-slate-900"
+                              }`}
+                            />
                             <button
                               onClick={() => saveTaskEdit(task.id)}
                               className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
@@ -852,7 +996,7 @@ function WorkspaceContent() {
                                 </span>
                               </div>
                               <p className={`mt-1 text-xs ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
-                                📅 {formatDisplayDate(task.dueDate)} {isOverdue ? "• OVERDUE" : ""}
+                                📅 {formatDisplayDate(task.dueDate)} at {task.dueTime} {isOverdue ? "• OVERDUE" : ""}
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5">
@@ -950,6 +1094,7 @@ function WorkspaceContent() {
                       <li key={`selected-${task.id}`} className="text-slate-800">
                         <span className="mr-2">{task.completed ? "✅" : "○"}</span>
                         <span className={task.completed ? "line-through text-slate-500" : "font-medium"}>{task.title}</span>
+                        <span className="ml-2 text-xs text-slate-500">({task.dueTime})</span>
                       </li>
                     ))
                   )}

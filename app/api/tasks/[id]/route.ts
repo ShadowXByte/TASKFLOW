@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
 type TaskPriority = (typeof PRIORITIES)[number];
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -26,6 +27,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     completed?: boolean;
     title?: string;
     dueDate?: string;
+    dueTime?: string;
     priority?: TaskPriority;
   };
 
@@ -38,6 +40,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     completed?: boolean;
     title?: string;
     dueDate?: string;
+    dueTime?: string;
     priority?: TaskPriority;
   } = {};
 
@@ -59,6 +62,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ message: "Due date is required." }, { status: 400 });
     }
     data.dueDate = dueDate;
+  }
+
+  if (typeof body.dueTime === "string") {
+    const dueTime = body.dueTime.trim();
+    if (!TIME_REGEX.test(dueTime)) {
+      return NextResponse.json({ message: "Invalid due time value." }, { status: 400 });
+    }
+    data.dueTime = dueTime;
   }
 
   if (typeof body.priority === "string") {

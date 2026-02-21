@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"] as const;
 type TaskPriority = (typeof PRIORITIES)[number];
+const TIME_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -14,7 +15,7 @@ export async function GET() {
 
   const tasks = await prisma.task.findMany({
     where: { userId: session.user.id },
-    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    orderBy: [{ dueDate: "asc" }, { dueTime: "asc" }, { createdAt: "asc" }],
   });
 
   return NextResponse.json(tasks);
@@ -26,9 +27,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await request.json()) as { title?: string; dueDate?: string; priority?: TaskPriority };
+  const body = (await request.json()) as {
+    title?: string;
+    dueDate?: string;
+    dueTime?: string;
+    priority?: TaskPriority;
+  };
   const title = body.title?.trim();
   const dueDate = body.dueDate?.trim();
+  const dueTime = body.dueTime?.trim() || "09:00";
   const priority = body.priority ?? "MEDIUM";
 
   if (!title || !dueDate) {
@@ -39,10 +46,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Invalid priority value." }, { status: 400 });
   }
 
+  if (!TIME_REGEX.test(dueTime)) {
+    return NextResponse.json({ message: "Invalid due time value." }, { status: 400 });
+  }
+
   const task = await prisma.task.create({
     data: {
       title,
       dueDate,
+      dueTime,
       priority,
       userId: session.user.id,
     },
