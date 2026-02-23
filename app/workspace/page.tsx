@@ -197,6 +197,7 @@ function WorkspaceContent() {
   const [pushConfigured, setPushConfigured] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushStatusMessage, setPushStatusMessage] = useState("");
+  const [chartAnimated, setChartAnimated] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -229,6 +230,18 @@ function WorkspaceContent() {
 
     safeStorageSetItem(THEME_KEY, darkMode ? "dark" : "light");
   }, [darkMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setChartAnimated(true);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -1069,8 +1082,9 @@ function WorkspaceContent() {
                         strokeWidth="12"
                         strokeLinecap="round"
                         transform="rotate(-90 50 50)"
-                        strokeDasharray={`${chartDistribution.completedLength} ${chartDistribution.circumference}`}
+                        strokeDasharray={`${chartAnimated ? chartDistribution.completedLength : 0} ${chartDistribution.circumference}`}
                         strokeDashoffset="0"
+                        style={{ transition: "stroke-dasharray 700ms ease" }}
                       />
                       <circle
                         cx="50"
@@ -1081,8 +1095,9 @@ function WorkspaceContent() {
                         strokeWidth="12"
                         strokeLinecap="round"
                         transform="rotate(-90 50 50)"
-                        strokeDasharray={`${chartDistribution.upcomingLength} ${chartDistribution.circumference}`}
-                        strokeDashoffset={chartDistribution.upcomingOffset}
+                        strokeDasharray={`${chartAnimated ? chartDistribution.upcomingLength : 0} ${chartDistribution.circumference}`}
+                        strokeDashoffset={chartAnimated ? chartDistribution.upcomingOffset : 0}
+                        style={{ transition: "stroke-dasharray 760ms ease, stroke-dashoffset 760ms ease" }}
                       />
                       <circle
                         cx="50"
@@ -1093,8 +1108,9 @@ function WorkspaceContent() {
                         strokeWidth="12"
                         strokeLinecap="round"
                         transform="rotate(-90 50 50)"
-                        strokeDasharray={`${chartDistribution.overdueLength} ${chartDistribution.circumference}`}
-                        strokeDashoffset={chartDistribution.overdueOffset}
+                        strokeDasharray={`${chartAnimated ? chartDistribution.overdueLength : 0} ${chartDistribution.circumference}`}
+                        strokeDashoffset={chartAnimated ? chartDistribution.overdueOffset : 0}
+                        style={{ transition: "stroke-dasharray 820ms ease, stroke-dashoffset 820ms ease" }}
                       />
                     </svg>
                   </div>
