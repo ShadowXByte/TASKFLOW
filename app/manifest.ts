@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "TASKFLOW",
     short_name: "TASKFLOW",
     description: "Task and calendar planner",
-    start_url: "/workspace",
+    start_url: "/",
     display: "standalone",
     background_color: "#0f172a",
     theme_color: "#0f172a",
