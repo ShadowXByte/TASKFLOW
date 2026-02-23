@@ -261,8 +261,7 @@ function WorkspaceContent() {
   useEffect(() => {
     if (
       typeof window === "undefined" ||
-      notificationPermission !== "granted" ||
-      (workspaceMode === "account" && pushEnabled)
+      notificationPermission !== "granted"
     ) {
       return;
     }
@@ -310,7 +309,7 @@ function WorkspaceContent() {
     tick();
     const interval = window.setInterval(tick, 30000);
     return () => window.clearInterval(interval);
-  }, [tasks, workspaceMode, notificationPermission, pushEnabled]);
+  }, [tasks, workspaceMode, notificationPermission]);
 
   const syncPushSubscription = async (permission: NotificationPermission) => {
     try {
