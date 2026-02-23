@@ -75,12 +75,28 @@ const parseDisplayDate = (value: string) => {
 
 const isValidTime = (value: string) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 
+const safeStorageGetItem = (key: string) => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const safeStorageSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    return;
+  }
+};
+
 const readNotifiedKeys = () => {
   if (typeof window === "undefined") {
     return new Set<string>();
   }
 
-  const raw = localStorage.getItem(NOTIFIED_TASKS_KEY);
+  const raw = safeStorageGetItem(NOTIFIED_TASKS_KEY);
   if (!raw) {
     return new Set<string>();
   }
@@ -110,7 +126,7 @@ const readGuestTasks = (): Task[] => {
     return [];
   }
 
-  const raw = localStorage.getItem(GUEST_TASKS_KEY);
+  const raw = safeStorageGetItem(GUEST_TASKS_KEY);
   if (!raw) {
     return [];
   }
@@ -148,7 +164,7 @@ const writeGuestTasks = (tasks: Task[]) => {
   if (typeof window === "undefined") {
     return;
   }
-  localStorage.setItem(GUEST_TASKS_KEY, JSON.stringify(tasks));
+  safeStorageSetItem(GUEST_TASKS_KEY, JSON.stringify(tasks));
 };
 
 function WorkspaceContent() {
@@ -200,7 +216,7 @@ function WorkspaceContent() {
       return;
     }
 
-    const savedTheme = localStorage.getItem(THEME_KEY);
+    const savedTheme = safeStorageGetItem(THEME_KEY);
     if (savedTheme === "dark") {
       setDarkMode(true);
     }
@@ -211,7 +227,7 @@ function WorkspaceContent() {
       return;
     }
 
-    localStorage.setItem(THEME_KEY, darkMode ? "dark" : "light");
+    safeStorageSetItem(THEME_KEY, darkMode ? "dark" : "light");
   }, [darkMode]);
 
   useEffect(() => {
@@ -220,14 +236,22 @@ function WorkspaceContent() {
       return;
     }
 
-    setNotificationPermission(Notification.permission);
+    try {
+      setNotificationPermission(Notification.permission);
 
-    const asked = localStorage.getItem(NOTIFICATION_ASKED_KEY);
-    if (!asked && Notification.permission === "default") {
-      localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
-      void Notification.requestPermission().then((permission) => {
-        setNotificationPermission(permission);
-      });
+      const asked = safeStorageGetItem(NOTIFICATION_ASKED_KEY);
+      if (!asked && Notification.permission === "default") {
+        safeStorageSetItem(NOTIFICATION_ASKED_KEY, "1");
+        void Notification.requestPermission()
+          .then((permission) => {
+            setNotificationPermission(permission);
+          })
+          .catch(() => {
+            setNotificationPermission("default");
+          });
+      }
+    } catch {
+      setNotificationPermission("unsupported");
     }
   }, []);
 
@@ -722,9 +746,11 @@ function WorkspaceContent() {
       return;
     }
 
-    localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
+    safeStorageSetItem(NOTIFICATION_ASKED_KEY, "1");
     const permission =
-      Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission().catch(() => "default" as NotificationPermission);
     setNotificationPermission(permission);
 
     if (permission === "denied") {
