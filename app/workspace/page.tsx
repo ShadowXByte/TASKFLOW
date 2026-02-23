@@ -75,6 +75,29 @@ const parseDisplayDate = (value: string) => {
 
 const isValidTime = (value: string) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 
+const readNotifiedKeys = () => {
+  if (typeof window === "undefined") {
+    return new Set<string>();
+  }
+
+  const raw = localStorage.getItem(NOTIFIED_TASKS_KEY);
+  if (!raw) {
+    return new Set<string>();
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return new Set<string>();
+    }
+
+    const validKeys = parsed.filter((item): item is string => typeof item === "string");
+    return new Set<string>(validKeys);
+  } catch {
+    return new Set<string>();
+  }
+};
+
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -157,6 +180,7 @@ function WorkspaceContent() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const [pushConfigured, setPushConfigured] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushStatusMessage, setPushStatusMessage] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -244,8 +268,7 @@ function WorkspaceContent() {
     }
 
     const tick = () => {
-      const raw = localStorage.getItem(NOTIFIED_TASKS_KEY);
-      const notifiedSet = new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+      const notifiedSet = readNotifiedKeys();
       const now = Date.now();
 
       for (const task of tasks) {
@@ -262,14 +285,26 @@ function WorkspaceContent() {
         const shouldNotify = now >= dueTimestamp && now - dueTimestamp < 6 * 60 * 60 * 1000;
 
         if (shouldNotify && !notifiedSet.has(notifyKey)) {
-          const title = `Task Due: ${task.title}`;
-          const body = `Due at ${task.dueTime} on ${formatDisplayDate(task.dueDate)}`;
-          new Notification(title, { body });
+          try {
+            if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+              continue;
+            }
+
+            const title = `Task Due: ${task.title}`;
+            const body = `Due at ${task.dueTime} on ${formatDisplayDate(task.dueDate)}`;
+            new Notification(title, { body });
+          } catch {
+            continue;
+          }
           notifiedSet.add(notifyKey);
         }
       }
 
-      localStorage.setItem(NOTIFIED_TASKS_KEY, JSON.stringify(Array.from(notifiedSet).slice(-500)));
+      try {
+        localStorage.setItem(NOTIFIED_TASKS_KEY, JSON.stringify(Array.from(notifiedSet).slice(-500)));
+      } catch {
+        return;
+      }
     };
 
     tick();
@@ -279,6 +314,7 @@ function WorkspaceContent() {
 
   const syncPushSubscription = async (permission: NotificationPermission) => {
     try {
+      setPushStatusMessage("");
       if (
         workspaceMode !== "account" ||
         status !== "authenticated" ||
@@ -287,6 +323,7 @@ function WorkspaceContent() {
         !("PushManager" in window)
       ) {
         setPushEnabled(false);
+        setPushStatusMessage("Push is available only in account mode on supported browsers.");
         return;
       }
 
@@ -294,6 +331,7 @@ function WorkspaceContent() {
       if (!configResponse.ok) {
         setPushConfigured(false);
         setPushEnabled(false);
+        setPushStatusMessage("Push config could not be loaded.");
         return;
       }
 
@@ -304,10 +342,13 @@ function WorkspaceContent() {
 
       if (!isConfigured) {
         setPushEnabled(false);
+        setPushStatusMessage("Push is not configured on the server.");
         return;
       }
 
-      const registration = await navigator.serviceWorker.register(SW_PATH);
+      const existingRegistration = await navigator.serviceWorker.getRegistration(SW_PATH);
+      const registration = existingRegistration || (await navigator.serviceWorker.register(SW_PATH));
+      await navigator.serviceWorker.ready;
       const existingSubscription = await registration.pushManager.getSubscription();
 
       if (permission !== "granted") {
@@ -321,6 +362,7 @@ function WorkspaceContent() {
           });
         }
         setPushEnabled(false);
+        setPushStatusMessage("Notification permission is not granted.");
         return;
       }
 
@@ -334,12 +376,14 @@ function WorkspaceContent() {
       const json = subscription.toJSON();
       if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
         setPushEnabled(false);
+        setPushStatusMessage("Push subscription data is incomplete.");
         return;
       }
 
       const response = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           endpoint: json.endpoint,
           keys: {
@@ -350,8 +394,11 @@ function WorkspaceContent() {
       });
 
       setPushEnabled(response.ok);
-    } catch {
+      setPushStatusMessage(response.ok ? "Push notifications are active." : "Failed to save push subscription.");
+    } catch (error) {
       setPushEnabled(false);
+      const message = error instanceof Error ? error.message : "Push activation failed.";
+      setPushStatusMessage(message);
     }
   };
 
@@ -672,12 +719,21 @@ function WorkspaceContent() {
   const requestNotificationPermission = async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
       setNotificationPermission("unsupported");
+      setPushStatusMessage("This browser does not support notifications.");
       return;
     }
 
     localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
-    const permission = await Notification.requestPermission();
+    const permission =
+      Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     setNotificationPermission(permission);
+
+    if (permission === "denied") {
+      setPushEnabled(false);
+      setPushStatusMessage("Notifications are blocked in browser settings.");
+      return;
+    }
+
     await syncPushSubscription(permission);
   };
 
@@ -790,6 +846,11 @@ function WorkspaceContent() {
           <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
             Tasks are ordered by date and time. Notifications include the task name when due.
           </p>
+          {workspaceMode === "account" && (
+            <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+              {pushStatusMessage || (pushEnabled ? "Push status: active" : "Push status: not active")}
+            </p>
+          )}
         </header>
 
         {status === "loading" && workspaceMode === "account" ? (
