@@ -24,6 +24,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   tasks         Task[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Account {
@@ -71,6 +72,32 @@ model Task {
   updatedAt DateTime @updatedAt
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notificationLogs NotificationLog[]
 
   @@index([userId, dueDate])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notificationLogs NotificationLog[]
+}
+
+model NotificationLog {
+  id                 String   @id @default(cuid())
+  taskId             Int
+  pushSubscriptionId String
+  dueDate            String
+  dueTime            String
+  sentAt             DateTime @default(now())
+  task               Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pushSubscription   PushSubscription @relation(fields: [pushSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, pushSubscriptionId, dueDate, dueTime])
 }

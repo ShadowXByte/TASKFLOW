@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "TASKFLOW",
   description: "Simple todo, task, and calendar app with account login",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/unnamed.jpg",
     shortcut: "/unnamed.jpg",

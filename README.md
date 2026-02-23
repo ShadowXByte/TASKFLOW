@@ -43,6 +43,10 @@ Update `.env`:
 - `DIRECT_URL` = direct connection string
 - `NEXTAUTH_URL` = `http://localhost:3000`
 - `NEXTAUTH_SECRET` = a long random secret
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = VAPID public key for Web Push
+- `VAPID_PRIVATE_KEY` = VAPID private key for Web Push
+- `VAPID_SUBJECT` = contact URL/mailto value (example: `mailto:you@example.com`)
+- `CRON_SECRET` = secret used by reminder cron endpoint (for non-Vercel manual calls)
 
 ### 3) Sync database schema and generate Prisma client
 
@@ -72,6 +76,8 @@ Open http://localhost:3000.
 
 - Run `npm run prisma:push` for first-time Neon schema setup.
 - Keep `NEXTAUTH_SECRET` private and rotate it if leaked.
+- Push reminders for installed Android PWA use Service Worker + Web Push.
+- `vercel.json` includes a 1-minute cron route at `/api/cron/push-reminders`.
 
 ## Author
 

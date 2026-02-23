@@ -29,6 +29,7 @@ const THEME_KEY = "taskflow_theme";
 const NOTIFICATION_ASKED_KEY = "taskflow_notifications_asked";
 const NOTIFIED_TASKS_KEY = "taskflow_notified_tasks";
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
+const SW_PATH = "/sw.js";
 
 const toDateInputValue = (date: Date) => {
   const year = date.getFullYear();
@@ -73,6 +74,13 @@ const parseDisplayDate = (value: string) => {
 };
 
 const isValidTime = (value: string) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
+
+const urlBase64ToUint8Array = (base64String: string) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from(rawData, (item) => item.charCodeAt(0));
+};
 
 const readGuestTasks = (): Task[] => {
   if (typeof window === "undefined") {
@@ -147,6 +155,8 @@ function WorkspaceContent() {
   const [editDueTimeInput, setEditDueTimeInput] = useState("09:00");
   const [editPriority, setEditPriority] = useState<TaskPriority>("MEDIUM");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [pushConfigured, setPushConfigured] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [loadingTasks, setLoadingTasks] = useState(false);
@@ -225,7 +235,11 @@ function WorkspaceContent() {
   }, [workspaceMode, status]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || notificationPermission !== "granted") {
+    if (
+      typeof window === "undefined" ||
+      notificationPermission !== "granted" ||
+      (workspaceMode === "account" && pushEnabled)
+    ) {
       return;
     }
 
@@ -261,7 +275,94 @@ function WorkspaceContent() {
     tick();
     const interval = window.setInterval(tick, 30000);
     return () => window.clearInterval(interval);
-  }, [tasks, workspaceMode, notificationPermission]);
+  }, [tasks, workspaceMode, notificationPermission, pushEnabled]);
+
+  const syncPushSubscription = async (permission: NotificationPermission) => {
+    try {
+      if (
+        workspaceMode !== "account" ||
+        status !== "authenticated" ||
+        typeof window === "undefined" ||
+        !("serviceWorker" in navigator) ||
+        !("PushManager" in window)
+      ) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const configResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+      if (!configResponse.ok) {
+        setPushConfigured(false);
+        setPushEnabled(false);
+        return;
+      }
+
+      const config = (await configResponse.json()) as { configured?: boolean; vapidPublicKey?: string };
+      const vapidPublicKey = config.vapidPublicKey || "";
+      const isConfigured = Boolean(config.configured && vapidPublicKey);
+      setPushConfigured(isConfigured);
+
+      if (!isConfigured) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register(SW_PATH);
+      const existingSubscription = await registration.pushManager.getSubscription();
+
+      if (permission !== "granted") {
+        if (existingSubscription) {
+          const endpoint = existingSubscription.endpoint;
+          await existingSubscription.unsubscribe();
+          await fetch("/api/push/subscribe", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint }),
+          });
+        }
+        setPushEnabled(false);
+        return;
+      }
+
+      const subscription =
+        existingSubscription ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        }));
+
+      const json = subscription.toJSON();
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+        setPushEnabled(false);
+        return;
+      }
+
+      const response = await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          endpoint: json.endpoint,
+          keys: {
+            p256dh: json.keys.p256dh,
+            auth: json.keys.auth,
+          },
+        }),
+      });
+
+      setPushEnabled(response.ok);
+    } catch {
+      setPushEnabled(false);
+    }
+  };
+
+  useEffect(() => {
+    if (notificationPermission === "unsupported") {
+      setPushEnabled(false);
+      return;
+    }
+
+    void syncPushSubscription(notificationPermission as NotificationPermission);
+  }, [workspaceMode, status, notificationPermission]);
 
   const calendarCells = useMemo(() => {
     const firstDay = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
@@ -577,6 +678,7 @@ function WorkspaceContent() {
     localStorage.setItem(NOTIFICATION_ASKED_KEY, "1");
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
+    await syncPushSubscription(permission);
   };
 
   return (
@@ -652,13 +754,21 @@ function WorkspaceContent() {
                     : "bg-white/50 text-slate-900 border-white/50 hover:bg-white/70"
                 }`}
               >
-                {notificationPermission === "granted"
-                  ? "🔔 Notifications On"
-                  : notificationPermission === "denied"
-                    ? "🔕 Notifications Blocked"
-                    : notificationPermission === "unsupported"
-                      ? "🔕 Notifications N/A"
-                      : "🔔 Enable Notifications"}
+                {workspaceMode === "guest"
+                  ? notificationPermission === "granted"
+                    ? "🔔 Local Notifications On"
+                    : notificationPermission === "denied"
+                      ? "🔕 Notifications Blocked"
+                      : notificationPermission === "unsupported"
+                        ? "🔕 Notifications N/A"
+                        : "🔔 Enable Notifications"
+                  : notificationPermission !== "granted"
+                    ? "🔔 Enable Push"
+                    : !pushConfigured
+                      ? "🔕 Push Not Configured"
+                      : pushEnabled
+                        ? "🔔 Push Active"
+                        : "🔔 Activate Push"}
               </button>
               {workspaceMode === "account" && status === "authenticated" && (
                 <button
