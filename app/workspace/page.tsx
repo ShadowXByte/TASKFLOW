@@ -538,6 +538,8 @@ function WorkspaceContent() {
       : 0;
 
     return {
+      totalTasks,
+      completedTasks,
       productivityScore,
       completionRate,
       last7CompletionRate,
@@ -546,6 +548,29 @@ function WorkspaceContent() {
       highPriorityOpen: highPriorityTasks - completedHighPriorityTasks,
     };
   }, [tasks, today]);
+
+  const chartDistribution = useMemo(() => {
+    const baseTotal = analytics.completedTasks + analytics.upcomingTasks + analytics.overdueTasks;
+    const total = Math.max(baseTotal, 1);
+    const circumference = 2 * Math.PI * 42;
+
+    const completedLength = (analytics.completedTasks / total) * circumference;
+    const upcomingLength = (analytics.upcomingTasks / total) * circumference;
+    const overdueLength = (analytics.overdueTasks / total) * circumference;
+
+    return {
+      total: baseTotal,
+      completedPct: Math.round((analytics.completedTasks / total) * 100),
+      upcomingPct: Math.round((analytics.upcomingTasks / total) * 100),
+      overduePct: Math.round((analytics.overdueTasks / total) * 100),
+      completedLength,
+      upcomingLength,
+      overdueLength,
+      upcomingOffset: -completedLength,
+      overdueOffset: -(completedLength + upcomingLength),
+      circumference,
+    };
+  }, [analytics.completedTasks, analytics.overdueTasks, analytics.upcomingTasks]);
 
   const submitAuth = async () => {
     setAuthMessage("");
@@ -1023,26 +1048,96 @@ function WorkspaceContent() {
                 </span>
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
-                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Completion Rate</p>
-                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.completionRate}%</p>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+                <div className={`rounded-2xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <div className="mx-auto w-fit">
+                    <svg viewBox="0 0 100 100" className="h-32 w-32">
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        className={darkMode ? "stroke-slate-700" : "stroke-slate-200"}
+                        strokeWidth="12"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        className="stroke-emerald-500"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                        strokeDasharray={`${chartDistribution.completedLength} ${chartDistribution.circumference}`}
+                        strokeDashoffset="0"
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        className="stroke-amber-500"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                        strokeDasharray={`${chartDistribution.upcomingLength} ${chartDistribution.circumference}`}
+                        strokeDashoffset={chartDistribution.upcomingOffset}
+                      />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="42"
+                        fill="none"
+                        className="stroke-red-500"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        transform="rotate(-90 50 50)"
+                        strokeDasharray={`${chartDistribution.overdueLength} ${chartDistribution.circumference}`}
+                        strokeDashoffset={chartDistribution.overdueOffset}
+                      />
+                    </svg>
+                  </div>
+                  <p className={`mt-2 text-center text-xs ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
+                    Task Distribution ({chartDistribution.total})
+                  </p>
+                  <div className="mt-2 space-y-1 text-xs">
+                    <p className={`flex items-center justify-between ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Completed</span>
+                      <span>{chartDistribution.completedPct}%</span>
+                    </p>
+                    <p className={`flex items-center justify-between ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" />Upcoming</span>
+                      <span>{chartDistribution.upcomingPct}%</span>
+                    </p>
+                    <p className={`flex items-center justify-between ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
+                      <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Overdue</span>
+                      <span>{chartDistribution.overduePct}%</span>
+                    </p>
+                  </div>
                 </div>
-                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
-                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Last 7 Days (Due) </p>
-                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.last7CompletionRate}%</p>
-                </div>
-                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
-                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Upcoming Tasks</p>
-                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.upcomingTasks}</p>
-                </div>
-                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
-                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Overdue Tasks</p>
-                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.overdueTasks}</p>
-                </div>
-                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
-                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>High Priority Open</p>
-                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.highPriorityOpen}</p>
+
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                    <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Completion Rate</p>
+                    <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.completionRate}%</p>
+                  </div>
+                  <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                    <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Last 7 Days (Due) </p>
+                    <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.last7CompletionRate}%</p>
+                  </div>
+                  <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                    <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Upcoming Tasks</p>
+                    <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.upcomingTasks}</p>
+                  </div>
+                  <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                    <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Overdue Tasks</p>
+                    <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.overdueTasks}</p>
+                  </div>
+                  <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                    <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>High Priority Open</p>
+                    <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.highPriorityOpen}</p>
+                  </div>
                 </div>
               </div>
             </section>
