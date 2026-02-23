@@ -489,6 +489,64 @@ function WorkspaceContent() {
     [filteredTasks],
   );
 
+  const analytics = useMemo(() => {
+    const now = Date.now();
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter((task) => task.completed).length;
+    const activeTasks = totalTasks - completedTasks;
+
+    const overdueTasks = tasks.filter((task) => {
+      if (task.completed) {
+        return false;
+      }
+
+      const taskTimestamp = new Date(`${task.dueDate}T${task.dueTime}:00`).getTime();
+      return !Number.isNaN(taskTimestamp) && taskTimestamp < now;
+    }).length;
+
+    const upcomingTasks = tasks.filter((task) => {
+      if (task.completed) {
+        return false;
+      }
+
+      const taskTimestamp = new Date(`${task.dueDate}T${task.dueTime}:00`).getTime();
+      return !Number.isNaN(taskTimestamp) && taskTimestamp >= now;
+    }).length;
+
+    const highPriorityTasks = tasks.filter((task) => task.priority === "HIGH").length;
+    const completedHighPriorityTasks = tasks.filter((task) => task.priority === "HIGH" && task.completed).length;
+
+    const completionRate = totalTasks ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const onTrackRate = activeTasks ? Math.round(((activeTasks - overdueTasks) / activeTasks) * 100) : 100;
+    const highPriorityCompletionRate = highPriorityTasks
+      ? Math.round((completedHighPriorityTasks / highPriorityTasks) * 100)
+      : 100;
+
+    const productivityScore = Math.max(
+      0,
+      Math.min(100, Math.round(completionRate * 0.5 + onTrackRate * 0.3 + highPriorityCompletionRate * 0.2)),
+    );
+
+    const last7Date = new Date();
+    last7Date.setDate(last7Date.getDate() - 6);
+    const last7Start = toDateInputValue(last7Date);
+
+    const last7DueTasks = tasks.filter((task) => task.dueDate >= last7Start && task.dueDate <= today);
+    const completedLast7DueTasks = last7DueTasks.filter((task) => task.completed).length;
+    const last7CompletionRate = last7DueTasks.length
+      ? Math.round((completedLast7DueTasks / last7DueTasks.length) * 100)
+      : 0;
+
+    return {
+      productivityScore,
+      completionRate,
+      last7CompletionRate,
+      overdueTasks,
+      upcomingTasks,
+      highPriorityOpen: highPriorityTasks - completedHighPriorityTasks,
+    };
+  }, [tasks, today]);
+
   const submitAuth = async () => {
     setAuthMessage("");
     setAuthLoading(true);
@@ -944,7 +1002,52 @@ function WorkspaceContent() {
             </div>
           </section>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className="space-y-6">
+            <section
+              className={`rounded-3xl p-4 backdrop-blur-md border shadow-lg md:p-6 ${
+                darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={`text-xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Analytics Dashboard</h2>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${
+                    analytics.productivityScore >= 75
+                      ? "bg-emerald-500/20 text-emerald-700"
+                      : analytics.productivityScore >= 45
+                        ? "bg-amber-500/20 text-amber-700"
+                        : "bg-red-500/20 text-red-700"
+                  }`}
+                >
+                  Productivity Score: {analytics.productivityScore}/100
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Completion Rate</p>
+                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.completionRate}%</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Last 7 Days (Due) </p>
+                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.last7CompletionRate}%</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Upcoming Tasks</p>
+                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.upcomingTasks}</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Overdue Tasks</p>
+                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.overdueTasks}</p>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                  <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>High Priority Open</p>
+                  <p className={`mt-1 text-lg font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.highPriorityOpen}</p>
+                </div>
+              </div>
+            </section>
+
+            <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
             <section
               className={`rounded-3xl p-4 backdrop-blur-md border shadow-lg md:p-8 ${
                 darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
@@ -1297,6 +1400,7 @@ function WorkspaceContent() {
                 </ul>
               </div>
             </section>
+            </div>
           </div>
         )}
       </div>
