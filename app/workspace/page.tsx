@@ -1984,14 +1984,26 @@ function WorkspaceContent() {
         )}
       </div>
 
-      <footer className={`mt-12 border-t pt-6 pb-4 text-center ${darkMode ? "border-white/15" : "border-slate-200/50"}`}>
+      <footer className={`mt-12 border-t pt-6 pb-4 text-center ${darkMode ? "border-white/15" : "border-slate-200/60"}`}>
         <p className={`text-sm font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Taskflow</p>
         <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Plan better. Finish on time.</p>
         <p className={`mt-2 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
           Privacy · Terms · Contact
         </p>
-        <p className={`mt-1 text-[11px] ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-          GitHub: <a href="https://github.com/ShadowXByte" target="_blank" rel="noreferrer" className="underline decoration-dotted">@ShadowXByte</a>
+        <p className={`mt-2 text-xs ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
+          GitHub ·{" "}
+          <a
+            href="https://github.com/ShadowXByte"
+            target="_blank"
+            rel="noreferrer"
+            className={`rounded-full border px-2.5 py-1 font-semibold transition ${
+              darkMode
+                ? "border-white/20 bg-white/10 text-slate-100 hover:bg-white/20"
+                : "border-slate-300/80 bg-white/80 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            @ShadowXByte
+          </a>
         </p>
         <p className={`mt-1 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
           © 2026 ShadowXByte

@@ -63,18 +63,23 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="mt-24 border-t border-slate-200/50 pt-8 text-center">
-        <p className="text-sm font-light text-slate-600">
-          Powered by{" "}
-          <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold italic tracking-wide">
-            ShadowXByte
-          </span>
+      <footer className="mt-24 border-t border-slate-200/60 pt-8 pb-4 text-center">
+        <p className="text-sm font-semibold text-slate-900">Taskflow</p>
+        <p className="mt-1 text-xs text-slate-600">Plan better. Finish on time.</p>
+        <p className="mt-2 text-[11px] text-slate-500">Privacy · Terms · Contact</p>
+        <p className="mt-2 text-xs text-slate-700">
+          GitHub ·{" "}
+          <a
+            href="https://github.com/ShadowXByte"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full border border-slate-300/80 bg-white/80 px-2.5 py-1 font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            @ShadowXByte
+          </a>
         </p>
-        <p className="mt-2 text-xs text-slate-600">
-          GitHub: <a href="https://github.com/ShadowXByte" target="_blank" rel="noreferrer" className="underline decoration-dotted">@ShadowXByte</a>
-        </p>
-      </div>
+        <p className="mt-2 text-[11px] text-slate-500">© 2026 ShadowXByte</p>
+      </footer>
     </main>
   );
 }
