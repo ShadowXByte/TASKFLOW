@@ -8,51 +8,49 @@ export default function Home() {
       <div className="pointer-events-none absolute bottom-0 left-0 h-80 w-80 rounded-full bg-indigo-300/20 blur-3xl" />
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-16">
-        <div className="rounded-3xl border border-white/60 bg-white/55 p-6 shadow-xl backdrop-blur-xl md:p-10">
-          <div className="space-y-8">
-            <div className="inline-block">
-              <span className="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-blue-100/70 px-4 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
-              <Image src="/unnamed.jpg" alt="Taskflow logo" width={18} height={18} className="rounded-full" />
-              TASKFLOW
-              </span>
-            </div>
+        <div className="space-y-8 md:space-y-10">
+          <div className="inline-block">
+            <span className="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-blue-100/70 px-4 py-1.5 text-sm font-semibold text-blue-700 shadow-sm">
+            <Image src="/unnamed.jpg" alt="Taskflow logo" width={18} height={18} className="rounded-full" />
+            TASKFLOW
+            </span>
+          </div>
 
-            <div>
-              <h1 className="max-w-4xl text-5xl font-bold leading-tight tracking-tight text-slate-900 md:text-7xl">
-                Plan your work.<br />
-                Own your time.
-              </h1>
-              <p className="mt-6 max-w-2xl text-lg text-slate-600 md:text-xl">
-                Sync across devices with your account, or use guest mode for instant private planning.
-                Either way, your calendar keeps you focused on what matters.
-              </p>
-            </div>
+          <div>
+            <h1 className="max-w-4xl text-5xl font-bold leading-tight tracking-tight text-slate-900 md:text-7xl">
+              Plan your work.<br />
+              Own your time.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg text-slate-600 md:text-xl">
+              Sync across devices with your account, or use guest mode for instant private planning.
+              Either way, your calendar keeps you focused on what matters.
+            </p>
+          </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <Link
-                href="/workspace?mode=account"
-                className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-3 text-base font-semibold text-white shadow-lg transition duration-200 hover:shadow-xl hover:from-blue-700 hover:to-blue-800"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/workspace?mode=guest"
-                className="rounded-xl border-2 border-slate-300/80 bg-white/90 px-6 py-3 text-base font-semibold text-slate-900 shadow-sm transition duration-200 hover:border-slate-400 hover:bg-slate-50"
-              >
-                Try as Guest
-              </Link>
-            </div>
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <Link
+              href="/workspace?mode=account"
+              className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-3 text-base font-semibold text-white shadow-lg transition duration-200 hover:shadow-xl hover:from-blue-700 hover:to-blue-800"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/workspace?mode=guest"
+              className="rounded-xl border-2 border-slate-300/80 bg-white/90 px-6 py-3 text-base font-semibold text-slate-900 shadow-sm transition duration-200 hover:border-slate-400 hover:bg-slate-50"
+            >
+              Try as Guest
+            </Link>
+          </div>
 
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
-                Offline-ready workflow
-              </div>
-              <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
-                Calendar + analytics
-              </div>
-              <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
-                Guest & account modes
-              </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
+              Offline-ready workflow
+            </div>
+            <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
+              Calendar + analytics
+            </div>
+            <div className="rounded-xl border border-slate-200/70 bg-white/70 px-3 py-2 text-center text-xs text-slate-600">
+              Guest & account modes
             </div>
           </div>
         </div>
