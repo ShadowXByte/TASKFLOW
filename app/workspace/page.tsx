@@ -1516,15 +1516,16 @@ function WorkspaceContent() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="mt-12 border-t border-slate-200/50 pt-6 pb-4 text-center">
-        <p className="text-xs font-light text-slate-600">
-          Powered by{" "}
-          <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent font-bold italic tracking-wide">
-            ShadowXByte
-          </span>
+      <footer className={`mt-12 border-t pt-6 pb-4 text-center ${darkMode ? "border-white/15" : "border-slate-200/50"}`}>
+        <p className={`text-sm font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Taskflow</p>
+        <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Plan better. Finish on time.</p>
+        <p className={`mt-2 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
+          Privacy · Terms · Contact
         </p>
-      </div>
+        <p className={`mt-1 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
+          © 2026 ShadowXByte
+        </p>
+      </footer>
     </main>
   );
 }
