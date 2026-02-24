@@ -1274,16 +1274,27 @@ function WorkspaceContent() {
 
   return (
     <main
-      className={`min-h-screen overflow-x-hidden px-4 py-6 md:px-10 md:py-10 ${
+      className={`relative min-h-screen overflow-x-hidden px-4 py-6 md:px-10 md:py-10 ${
         darkMode
           ? "bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100"
           : "bg-gradient-to-br from-slate-50 via-white to-blue-50"
       }`}
     >
+      <div
+        className={`pointer-events-none absolute -top-20 right-0 h-72 w-72 rounded-full blur-3xl ${
+          darkMode ? "bg-blue-500/15" : "bg-blue-300/30"
+        }`}
+      />
+      <div
+        className={`pointer-events-none absolute bottom-0 left-0 h-80 w-80 rounded-full blur-3xl ${
+          darkMode ? "bg-indigo-500/15" : "bg-indigo-300/25"
+        }`}
+      />
+
       <div className="mx-auto w-full max-w-7xl space-y-6">
         <header
-          className={`rounded-3xl p-4 shadow-lg backdrop-blur-md border md:p-8 ${
-            darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
+          className={`rounded-3xl p-4 shadow-xl backdrop-blur-xl border md:p-8 ${
+            darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
           }`}
         >
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1473,8 +1484,8 @@ function WorkspaceContent() {
         ) : (
           <div className="space-y-6">
             <section
-              className={`rounded-3xl p-4 backdrop-blur-md border shadow-lg md:p-6 ${
-                darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
+              className={`rounded-3xl p-4 backdrop-blur-xl border shadow-xl md:p-6 ${
+                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1591,8 +1602,8 @@ function WorkspaceContent() {
 
             <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
             <section
-              className={`rounded-3xl p-4 backdrop-blur-md border shadow-lg md:p-8 ${
-                darkMode ? "bg-white/10 border-white/15" : "bg-white/40 border-white/50"
+              className={`rounded-3xl p-4 backdrop-blur-xl border shadow-xl md:p-8 ${
+                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
               }`}
             >
               <h2 className={`text-2xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Tasks</h2>
@@ -1908,7 +1919,7 @@ function WorkspaceContent() {
               </ul>
             </section>
 
-            <section className="rounded-3xl bg-white/40 p-4 backdrop-blur-md border border-white/50 shadow-lg md:p-8">
+            <section className="rounded-3xl bg-white/55 p-4 backdrop-blur-xl border border-white/70 shadow-xl md:p-8">
               <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
                 <div className="flex items-center gap-2">
@@ -1985,6 +1996,11 @@ function WorkspaceContent() {
       </div>
 
       <footer className={`mt-12 border-t pt-6 pb-4 text-center ${darkMode ? "border-white/15" : "border-slate-200/60"}`}>
+        <div
+          className={`mx-auto mb-4 h-px w-28 rounded-full ${
+            darkMode ? "bg-gradient-to-r from-transparent via-blue-300/60 to-transparent" : "bg-gradient-to-r from-transparent via-blue-500/40 to-transparent"
+          }`}
+        />
         <p className={`text-sm font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Taskflow</p>
         <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Plan better. Finish on time.</p>
         <p className={`mt-2 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
