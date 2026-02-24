@@ -23,6 +23,11 @@ type WorkspaceMode = "account" | "guest";
 
 type AuthTab = "login" | "register";
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 type PendingAccountOperation =
   | {
       type: "create";
@@ -236,6 +241,9 @@ function WorkspaceContent() {
   const [pushConfigured, setPushConfigured] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushStatusMessage, setPushStatusMessage] = useState("");
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [canInstallApp, setCanInstallApp] = useState(false);
+  const [isInstalledApp, setIsInstalledApp] = useState(false);
   const [chartAnimated, setChartAnimated] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -291,6 +299,47 @@ function WorkspaceContent() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const detectInstalled = () => {
+      const standaloneMode = window.matchMedia?.("(display-mode: standalone)")?.matches;
+      const iosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone;
+      const installed = Boolean(standaloneMode || iosStandalone);
+      setIsInstalledApp(installed);
+      if (installed) {
+        setCanInstallApp(false);
+        setDeferredInstallPrompt(null);
+      }
+    };
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      detectInstalled();
+      if (!isInstalledApp) {
+        setDeferredInstallPrompt(event as BeforeInstallPromptEvent);
+        setCanInstallApp(true);
+      }
+    };
+
+    const onInstalled = () => {
+      setDeferredInstallPrompt(null);
+      setCanInstallApp(false);
+      setIsInstalledApp(true);
+    };
+
+    detectInstalled();
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [isInstalledApp]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1171,6 +1220,24 @@ function WorkspaceContent() {
     await syncPushSubscription(permission);
   };
 
+  const triggerInstallPrompt = async () => {
+    if (!deferredInstallPrompt) {
+      return;
+    }
+
+    try {
+      await deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+      if (choice.outcome === "accepted") {
+        setCanInstallApp(false);
+      }
+    } catch {
+      return;
+    } finally {
+      setDeferredInstallPrompt(null);
+    }
+  };
+
   return (
     <main
       className={`min-h-screen overflow-x-hidden px-4 py-6 md:px-10 md:py-10 ${
@@ -1236,6 +1303,18 @@ function WorkspaceContent() {
               >
                 {darkMode ? "☀️ Light" : "🌙 Dark"}
               </button>
+              {canInstallApp && !isInstalledApp && (
+                <button
+                  onClick={() => void triggerInstallPrompt()}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold border transition ${
+                    darkMode
+                      ? "bg-white/10 text-slate-100 border-white/20 hover:bg-white/20"
+                      : "bg-white/50 text-slate-900 border-white/50 hover:bg-white/70"
+                  }`}
+                >
+                  ⬇️ Install App
+                </button>
+              )}
               <button
                 onClick={() => void requestNotificationPermission()}
                 className={`rounded-lg px-4 py-2 text-sm font-semibold border transition ${
