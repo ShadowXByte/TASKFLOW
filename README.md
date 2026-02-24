@@ -108,6 +108,14 @@ http://localhost:3000
 
 ---
 
+## 🔒 Security Note
+
+- User passwords are **not stored in plain text**.
+- Passwords are hashed using **bcrypt** before saving.
+- During login, TASKFLOW verifies passwords securely against the hashed value.
+
+---
+
 ## ❤️ Built by
 
 **ShadowXByte**
