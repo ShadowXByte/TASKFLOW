@@ -1,90 +1,100 @@
 # TASKFLOW
 
-TASKFLOW is a full-stack task management app with calendar planning and account-based data isolation.
+<p align="center">
+	<b>Your daily task planner with calendar + analytics.</b><br/>
+	Stay organized, track progress, and finish work on time.
+</p>
 
-## Overview
+---
 
-TASKFLOW allows app users to register, sign in, and manage personal tasks with due dates on a monthly calendar interface.
-Each authenticated account can only access its own tasks.
+## 📸 Workspace Preview
 
-## Features
+![Taskflow Workspace](docs/workspace-sample.svg)
 
-- Email/password authentication
-- User-scoped tasks (multi-user safe)
-- Create, complete, and delete tasks
-- Monthly calendar view with per-day task counts
-- Responsive UI built with Tailwind CSS
+---
 
-## Tech Stack
+## ✨ What is TASKFLOW?
 
-- Next.js (App Router + TypeScript)
-- NextAuth.js (Credentials Provider)
-- Prisma ORM
-- Neon PostgreSQL
-- Tailwind CSS
+TASKFLOW is a modern productivity app for people who want a simple way to plan tasks and see progress.
 
-## Getting Started
+You can:
+- Add tasks with due date, time, and priority
+- View everything in task list + calendar format
+- Track productivity with built-in analytics
+- Use Guest mode instantly or Account mode for sync
 
-### 1) Install dependencies
+---
+
+## ✅ Key Features
+
+- **Clean Workspace UI** (easy to use on desktop + mobile)
+- **Task Priorities** (LOW / MEDIUM / HIGH)
+- **Calendar View** (see tasks by day)
+- **Analytics Dashboard** (score, completion, overdue, distribution)
+- **Dark / Light Mode**
+- **Guest Mode** (no login required)
+
+---
+
+## 🧩 Tech Stack
+
+<p>
+	<img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" />
+	<img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+	<img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" />
+	<img alt="Prisma" src="https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
+	<img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white" />
+	<img alt="NextAuth" src="https://img.shields.io/badge/NextAuth-4B5563?style=for-the-badge&logo=auth0&logoColor=white" />
+</p>
+
+- Next.js + TypeScript for app experience
+- Tailwind CSS for clean, responsive UI
+- Prisma + PostgreSQL (Neon) for data
+- NextAuth for secure account login
+
+---
+
+## 🚀 Quick Start
+
+### 1) Install
 
 ```bash
 npm install
 ```
 
-### 2) Configure environment variables
+### 2) Create your env file
 
 ```bash
 copy .env.example .env
 ```
 
-Update `.env`:
-
-- `DATABASE_URL` = pooled connection string
-- `DIRECT_URL` = direct connection string
-- `NEXTAUTH_URL` = `http://localhost:3000`
-- `NEXTAUTH_SECRET` = a long random secret
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = VAPID public key for Web Push
-- `VAPID_PRIVATE_KEY` = VAPID private key for Web Push
-- `VAPID_SUBJECT` = contact URL/mailto value (example: `mailto:you@example.com`)
-- `CRON_SECRET` = secret used by reminder cron endpoint (for non-Vercel manual calls)
-
-### 3) Sync database schema and generate Prisma client
-
-```bash
-npm run prisma:push
-npm run prisma:generate
-```
-
-### 4) Run development server
+### 3) Run
 
 ```bash
 npm run dev
 ```
 
-Open http://localhost:3000.
+### 4) Open app
 
-## Scripts
+http://localhost:3000
 
-- `npm run dev` - Start local development server
-- `npm run build` - Create production build
-- `npm run start` - Run production server
-- `npm run lint` - Run ESLint
-- `npm run prisma:push` - Push Prisma schema to database
-- `npm run prisma:generate` - Generate Prisma Client
+---
 
-## Notes
+## 👤 For non-technical users
 
-- Run `npm run prisma:push` for first-time Neon schema setup.
-- Keep `NEXTAUTH_SECRET` private and rotate it if leaked.
-- Push reminders for installed Android PWA use Service Worker + Web Push.
-- `vercel.json` includes a 1-minute cron route at `/api/cron/push-reminders`.
+- Use **Guest Mode** to try the app immediately
+- Use **Account Mode** if you want saved/synced tasks
+- Analytics helps you quickly understand your productivity each day
 
-## Author
+---
 
-- ShadowXByte
+## 🛠 Basic Notes
 
-## Disclaimer
+- Account mode needs database values in `.env`
+- Notification behavior can vary by device/browser settings
 
-- This project is provided as-is for learning and development use.
-- You are responsible for production security, backups, and environment configuration.
-- Do not commit secrets such as database credentials or auth secrets to GitHub.
+---
+
+## ❤️ Built by
+
+**ShadowXByte**

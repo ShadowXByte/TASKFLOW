@@ -1,0 +1,70 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#EAF2FF"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EEF4FF"/>
+      <stop offset="1" stop-color="#F8FAFF"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="120" y1="40" x2="1160" y2="140" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="720" fill="url(#bg)"/>
+
+  <rect x="120" y="40" width="1040" height="100" rx="24" fill="url(#hero)"/>
+  <text x="160" y="95" font-family="Segoe UI, Arial, sans-serif" font-size="34" fill="white" font-weight="700">TASKFLOW Workspace</text>
+  <text x="160" y="125" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#DBEAFE">Sample view of tasks, analytics, and calendar</text>
+
+  <rect x="120" y="170" width="1040" height="510" rx="24" fill="white"/>
+
+  <rect x="150" y="205" width="350" height="160" rx="16" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <text x="175" y="240" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#0F172A" font-weight="700">Analytics Dashboard</text>
+  <text x="175" y="275" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#475569">Productivity Score: 78/100</text>
+  <text x="175" y="300" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#475569">Completion Rate: 71%</text>
+  <text x="175" y="325" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#475569">Overdue Tasks: 3</text>
+
+  <circle cx="445" cy="286" r="38" fill="none" stroke="#E2E8F0" stroke-width="12"/>
+  <path d="M445 248 A38 38 0 0 1 477 298" stroke="#10B981" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M477 298 A38 38 0 0 1 423 315" stroke="#F59E0B" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M423 315 A38 38 0 0 1 445 248" stroke="#EF4444" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+  <rect x="150" y="390" width="590" height="260" rx="16" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <text x="175" y="425" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#0F172A" font-weight="700">Tasks</text>
+
+  <rect x="175" y="446" width="540" height="44" rx="10" fill="white" stroke="#E2E8F0"/>
+  <text x="190" y="474" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#334155">Finalize homepage copy</text>
+  <text x="640" y="474" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64748B">24-02-2026 10:00</text>
+
+  <rect x="175" y="500" width="540" height="44" rx="10" fill="white" stroke="#E2E8F0"/>
+  <text x="190" y="528" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#334155">Review pending tasks</text>
+  <text x="640" y="528" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64748B">24-02-2026 14:30</text>
+
+  <rect x="175" y="554" width="540" height="44" rx="10" fill="white" stroke="#E2E8F0"/>
+  <text x="190" y="582" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#334155">Prepare release checklist</text>
+  <text x="640" y="582" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64748B">25-02-2026 09:15</text>
+
+  <rect x="770" y="205" width="360" height="445" rx="16" fill="#F8FAFC" stroke="#E2E8F0"/>
+  <text x="795" y="240" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#0F172A" font-weight="700">Calendar</text>
+
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64748B">
+    <text x="800" y="270">Sun</text><text x="845" y="270">Mon</text><text x="890" y="270">Tue</text><text x="935" y="270">Wed</text><text x="980" y="270">Thu</text><text x="1025" y="270">Fri</text><text x="1070" y="270">Sat</text>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#0F172A">
+    <rect x="795" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="810" y="306">23</text>
+    <rect x="842" y="285" width="40" height="34" rx="8" fill="#2563EB"/><text x="857" y="306" fill="white">24</text>
+    <rect x="889" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="904" y="306">25</text>
+    <rect x="936" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="951" y="306">26</text>
+    <rect x="983" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="998" y="306">27</text>
+    <rect x="1030" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="1045" y="306">28</text>
+    <rect x="1077" y="285" width="40" height="34" rx="8" fill="white" stroke="#E2E8F0"/><text x="1092" y="306">29</text>
+  </g>
+
+  <text x="795" y="370" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#334155">Tasks on 24-02-2026</text>
+  <text x="795" y="396" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#475569">• Finalize homepage copy (10:00)</text>
+  <text x="795" y="420" font-family="Segoe UI, Arial, sans-serif" font-size="13" fill="#475569">• Review pending tasks (14:30)</text>
+
+  <text x="120" y="704" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#64748B">Sample screenshot illustration for README</text>
+</svg>
