@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
@@ -23,11 +23,29 @@ type WorkspaceMode = "account" | "guest";
 
 type AuthTab = "login" | "register";
 
+type PendingAccountOperation =
+  | {
+      type: "create";
+      task: Task;
+      tempId: number;
+    }
+  | {
+      type: "update";
+      id: number;
+      changes: Partial<Pick<Task, "title" | "dueDate" | "dueTime" | "priority" | "completed">>;
+    }
+  | {
+      type: "delete";
+      id: number;
+    };
+
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const GUEST_TASKS_KEY = "taskflow_guest_tasks";
 const THEME_KEY = "taskflow_theme";
 const NOTIFICATION_ASKED_KEY = "taskflow_notifications_asked";
 const NOTIFIED_TASKS_KEY = "taskflow_notified_tasks";
+const ACCOUNT_TASKS_CACHE_PREFIX = "taskflow_account_tasks";
+const ACCOUNT_PENDING_OPS_PREFIX = "taskflow_account_pending_ops";
 const PRIORITIES: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 const SW_PATH = "/sw.js";
 
@@ -88,6 +106,27 @@ const safeStorageSetItem = (key: string, value: string) => {
     localStorage.setItem(key, value);
   } catch {
     return;
+  }
+};
+
+const safeStorageRemoveItem = (key: string) => {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+};
+
+const readJsonFromStorage = <T,>(key: string, fallback: T): T => {
+  const raw = safeStorageGetItem(key);
+  if (!raw) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
   }
 };
 
@@ -199,6 +238,7 @@ function WorkspaceContent() {
   const [pushStatusMessage, setPushStatusMessage] = useState("");
   const [chartAnimated, setChartAnimated] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const addDatePickerRef = useRef<HTMLInputElement | null>(null);
@@ -207,6 +247,15 @@ function WorkspaceContent() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+
+  const accountKey = useMemo(() => {
+    const userId = session?.user?.id?.toString().trim();
+    const emailValue = session?.user?.email?.toLowerCase().trim();
+    return userId || emailValue || "anonymous";
+  }, [session?.user?.email, session?.user?.id]);
+
+  const accountTasksCacheKey = `${ACCOUNT_TASKS_CACHE_PREFIX}:${accountKey}`;
+  const accountPendingOpsKey = `${ACCOUNT_PENDING_OPS_PREFIX}:${accountKey}`;
 
   useEffect(() => {
     setWorkspaceMode(modeFromQuery);
@@ -242,6 +291,142 @@ function WorkspaceContent() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateStatus = () => {
+      setIsOffline(!navigator.onLine);
+    };
+
+    updateStatus();
+    window.addEventListener("online", updateStatus);
+    window.addEventListener("offline", updateStatus);
+
+    return () => {
+      window.removeEventListener("online", updateStatus);
+      window.removeEventListener("offline", updateStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+
+    void navigator.serviceWorker.register(SW_PATH).catch(() => {
+      return;
+    });
+  }, []);
+
+  const readAccountCachedTasks = useCallback(() => {
+    return readJsonFromStorage<Task[]>(accountTasksCacheKey, []);
+  }, [accountTasksCacheKey]);
+
+  const writeAccountCachedTasks = useCallback((nextTasks: Task[]) => {
+    safeStorageSetItem(accountTasksCacheKey, JSON.stringify(nextTasks));
+  }, [accountTasksCacheKey]);
+
+  const readPendingAccountOps = useCallback(() => {
+    return readJsonFromStorage<PendingAccountOperation[]>(accountPendingOpsKey, []);
+  }, [accountPendingOpsKey]);
+
+  const writePendingAccountOps = useCallback((ops: PendingAccountOperation[]) => {
+    if (!ops.length) {
+      safeStorageRemoveItem(accountPendingOpsKey);
+      return;
+    }
+
+    safeStorageSetItem(accountPendingOpsKey, JSON.stringify(ops));
+  }, [accountPendingOpsKey]);
+
+  const pushPendingAccountOp = useCallback((operation: PendingAccountOperation) => {
+    const currentOps = readPendingAccountOps();
+    currentOps.push(operation);
+    writePendingAccountOps(currentOps);
+  }, [readPendingAccountOps, writePendingAccountOps]);
+
+  const flushPendingAccountOps = useCallback(async () => {
+    if (workspaceMode !== "account" || status !== "authenticated" || isOffline) {
+      return;
+    }
+
+    const ops = readPendingAccountOps();
+    if (!ops.length) {
+      return;
+    }
+
+    const tempIdMap = new Map<number, number>();
+
+    try {
+      for (const op of ops) {
+        if (op.type === "create") {
+          const response = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: op.task.title,
+              dueDate: op.task.dueDate,
+              dueTime: op.task.dueTime,
+              priority: op.task.priority,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("create failed");
+          }
+
+          const created = (await response.json()) as Task;
+          tempIdMap.set(op.tempId, created.id);
+          continue;
+        }
+
+        if (op.type === "update") {
+          const resolvedId = tempIdMap.get(op.id) ?? op.id;
+          if (resolvedId < 0) {
+            continue;
+          }
+
+          const response = await fetch(`/api/tasks/${resolvedId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(op.changes),
+          });
+
+          if (!response.ok) {
+            throw new Error("update failed");
+          }
+          continue;
+        }
+
+        const resolvedId = tempIdMap.get(op.id) ?? op.id;
+        if (resolvedId < 0) {
+          continue;
+        }
+
+        const response = await fetch(`/api/tasks/${resolvedId}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("delete failed");
+        }
+      }
+
+      writePendingAccountOps([]);
+
+      const refresh = await fetch("/api/tasks", { cache: "no-store" });
+      if (refresh.ok) {
+        const freshTasks = (await refresh.json()) as Task[];
+        setTasks(freshTasks);
+        writeAccountCachedTasks(freshTasks);
+      }
+    } catch {
+      return;
+    }
+  }, [isOffline, readPendingAccountOps, status, workspaceMode, writeAccountCachedTasks, writePendingAccountOps]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -280,20 +465,40 @@ function WorkspaceContent() {
         return;
       }
 
+      if (isOffline) {
+        setTasks(readAccountCachedTasks());
+        return;
+      }
+
       setLoadingTasks(true);
       try {
         const response = await fetch("/api/tasks", { cache: "no-store" });
         if (response.ok) {
           const data = (await response.json()) as Task[];
           setTasks(data);
+          writeAccountCachedTasks(data);
         }
+      } catch {
+        setTasks(readAccountCachedTasks());
       } finally {
         setLoadingTasks(false);
       }
     };
 
     void loadTasks();
-  }, [workspaceMode, status]);
+  }, [isOffline, readAccountCachedTasks, status, workspaceMode, writeAccountCachedTasks]);
+
+  useEffect(() => {
+    if (workspaceMode !== "account" || status !== "authenticated") {
+      return;
+    }
+
+    writeAccountCachedTasks(tasks);
+  }, [workspaceMode, status, tasks, writeAccountCachedTasks]);
+
+  useEffect(() => {
+    void flushPendingAccountOps();
+  }, [flushPendingAccountOps]);
 
   useEffect(() => {
     if (
@@ -659,18 +864,49 @@ function WorkspaceContent() {
       return;
     }
 
-    const response = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: cleanTitle, dueDate: parsedDueDate, dueTime: dueTimeInput, priority }),
-    });
-
-    if (!response.ok) {
+    if (isOffline) {
+      const offlineCreated: Task = {
+        id: -Date.now(),
+        title: cleanTitle,
+        dueDate: parsedDueDate,
+        dueTime: dueTimeInput,
+        completed: false,
+        priority,
+      };
+      setTasks((current) => [...current, offlineCreated]);
+      pushPendingAccountOp({ type: "create", task: offlineCreated, tempId: offlineCreated.id });
+      setTitle("");
+      setDueTimeInput("09:00");
+      setPriority("MEDIUM");
       return;
     }
 
-    const created = (await response.json()) as Task;
-    setTasks((current) => [...current, created]);
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: cleanTitle, dueDate: parsedDueDate, dueTime: dueTimeInput, priority }),
+      });
+
+      if (!response.ok) {
+        throw new Error("create failed");
+      }
+
+      const created = (await response.json()) as Task;
+      setTasks((current) => [...current, created]);
+    } catch {
+      const offlineCreated: Task = {
+        id: -Date.now(),
+        title: cleanTitle,
+        dueDate: parsedDueDate,
+        dueTime: dueTimeInput,
+        completed: false,
+        priority,
+      };
+      setTasks((current) => [...current, offlineCreated]);
+      pushPendingAccountOp({ type: "create", task: offlineCreated, tempId: offlineCreated.id });
+    }
+
     setTitle("");
     setDueTimeInput("09:00");
     setPriority("MEDIUM");
@@ -717,23 +953,78 @@ function WorkspaceContent() {
       return;
     }
 
-    const response = await fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: cleanTitle,
-        dueDate: parsedEditDueDate,
-        dueTime: editDueTimeInput,
-        priority: editPriority,
-      }),
-    });
-
-    if (!response.ok) {
+    if (isOffline) {
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                title: cleanTitle,
+                dueDate: parsedEditDueDate,
+                dueTime: editDueTimeInput,
+                priority: editPriority,
+              }
+            : task,
+        ),
+      );
+      pushPendingAccountOp({
+        type: "update",
+        id: taskId,
+        changes: {
+          title: cleanTitle,
+          dueDate: parsedEditDueDate,
+          dueTime: editDueTimeInput,
+          priority: editPriority,
+        },
+      });
+      cancelEditTask();
       return;
     }
 
-    const updated = (await response.json()) as Task;
-    setTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          dueDate: parsedEditDueDate,
+          dueTime: editDueTimeInput,
+          priority: editPriority,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("update failed");
+      }
+
+      const updated = (await response.json()) as Task;
+      setTasks((current) => current.map((task) => (task.id === taskId ? updated : task)));
+    } catch {
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                title: cleanTitle,
+                dueDate: parsedEditDueDate,
+                dueTime: editDueTimeInput,
+                priority: editPriority,
+              }
+            : task,
+        ),
+      );
+      pushPendingAccountOp({
+        type: "update",
+        id: taskId,
+        changes: {
+          title: cleanTitle,
+          dueDate: parsedEditDueDate,
+          dueTime: editDueTimeInput,
+          priority: editPriority,
+        },
+      });
+    }
+
     cancelEditTask();
   };
 
@@ -747,18 +1038,29 @@ function WorkspaceContent() {
       return;
     }
 
-    const response = await fetch(`/api/tasks/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completed: !completed }),
-    });
-
-    if (!response.ok) {
+    if (isOffline) {
+      setTasks((current) => current.map((task) => (task.id === id ? { ...task, completed: !completed } : task)));
+      pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
       return;
     }
 
-    const updated = (await response.json()) as Task;
-    setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+    try {
+      const response = await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: !completed }),
+      });
+
+      if (!response.ok) {
+        throw new Error("toggle failed");
+      }
+
+      const updated = (await response.json()) as Task;
+      setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+    } catch {
+      setTasks((current) => current.map((task) => (task.id === id ? { ...task, completed: !completed } : task)));
+      pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
+    }
   };
 
   const removeTask = async (id: number) => {
@@ -769,15 +1071,26 @@ function WorkspaceContent() {
       return;
     }
 
-    const response = await fetch(`/api/tasks/${id}`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
+    if (isOffline) {
+      setTasks((current) => current.filter((task) => task.id !== id));
+      pushPendingAccountOp({ type: "delete", id });
       return;
     }
 
-    setTasks((current) => current.filter((task) => task.id !== id));
+    try {
+      const response = await fetch(`/api/tasks/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("delete failed");
+      }
+
+      setTasks((current) => current.filter((task) => task.id !== id));
+    } catch {
+      setTasks((current) => current.filter((task) => task.id !== id));
+      pushPendingAccountOp({ type: "delete", id });
+    }
   };
 
   const goToPreviousMonth = () => {
@@ -967,6 +1280,11 @@ function WorkspaceContent() {
           <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
             Tasks are ordered by date and time. Notifications include the task name when due.
           </p>
+          {isOffline && (
+            <p className={`mt-1 text-xs font-medium ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+              Offline mode active. You can keep using tasks, and changes will sync when internet returns.
+            </p>
+          )}
           {workspaceMode === "account" && (
             <p className={`mt-1 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
               {pushStatusMessage || (pushEnabled ? "Push status: active" : "Push status: not active")}
