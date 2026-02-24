@@ -71,6 +71,9 @@ export default function Home() {
             ShadowXByte
           </span>
         </p>
+        <p className="mt-2 text-xs text-slate-600">
+          GitHub: <a href="https://github.com/ShadowXByte" target="_blank" rel="noreferrer" className="underline decoration-dotted">@ShadowXByte</a>
+        </p>
       </div>
     </main>
   );

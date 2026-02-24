@@ -1990,6 +1990,9 @@ function WorkspaceContent() {
         <p className={`mt-2 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
           Privacy · Terms · Contact
         </p>
+        <p className={`mt-1 text-[11px] ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+          GitHub: <a href="https://github.com/ShadowXByte" target="_blank" rel="noreferrer" className="underline decoration-dotted">@ShadowXByte</a>
+        </p>
         <p className={`mt-1 text-[11px] ${darkMode ? "text-slate-500" : "text-slate-500"}`}>
           © 2026 ShadowXByte
         </p>
