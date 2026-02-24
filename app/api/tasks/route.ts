@@ -29,11 +29,13 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as {
     title?: string;
+    description?: string;
     dueDate?: string;
     dueTime?: string;
     priority?: TaskPriority;
   };
   const title = body.title?.trim();
+  const description = typeof body.description === "string" ? body.description.trim() : "";
   const dueDate = body.dueDate?.trim();
   const dueTime = body.dueTime?.trim() || "09:00";
   const priority = body.priority ?? "MEDIUM";
@@ -53,6 +55,7 @@ export async function POST(request: Request) {
   const task = await prisma.task.create({
     data: {
       title,
+      description: description || null,
       dueDate,
       dueTime,
       priority,

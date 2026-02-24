@@ -26,6 +26,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const body = (await request.json()) as {
     completed?: boolean;
     title?: string;
+    description?: string | null;
     dueDate?: string;
     dueTime?: string;
     priority?: TaskPriority;
@@ -39,6 +40,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const data: {
     completed?: boolean;
     title?: string;
+    description?: string | null;
     dueDate?: string;
     dueTime?: string;
     priority?: TaskPriority;
@@ -54,6 +56,13 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ message: "Title cannot be empty." }, { status: 400 });
     }
     data.title = title;
+  }
+
+  if (typeof body.description === "string") {
+    const description = body.description.trim();
+    data.description = description || null;
+  } else if (body.description === null) {
+    data.description = null;
   }
 
   if (typeof body.dueDate === "string") {

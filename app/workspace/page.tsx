@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 type Task = {
   id: number;
   title: string;
+  description: string | null;
   dueDate: string;
   dueTime: string;
   completed: boolean;
@@ -37,7 +38,7 @@ type PendingAccountOperation =
   | {
       type: "update";
       id: number;
-      changes: Partial<Pick<Task, "title" | "dueDate" | "dueTime" | "priority" | "completed">>;
+      changes: Partial<Pick<Task, "title" | "description" | "dueDate" | "dueTime" | "priority" | "completed">>;
     }
   | {
       type: "delete";
@@ -192,6 +193,7 @@ const readGuestTasks = (): Task[] => {
       .map((task) => ({
         id: task.id,
         title: task.title,
+        description: typeof task.description === "string" ? task.description : null,
         dueDate: task.dueDate,
         dueTime: typeof task.dueTime === "string" && isValidTime(task.dueTime) ? task.dueTime : "09:00",
         completed: task.completed,
@@ -227,6 +229,7 @@ function WorkspaceContent() {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [dueDateInput, setDueDateInput] = useState(formatDisplayDate(today));
   const [dueTimeInput, setDueTimeInput] = useState("09:00");
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
@@ -234,6 +237,8 @@ function WorkspaceContent() {
   const [search, setSearch] = useState("");
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [expandedTaskIds, setExpandedTaskIds] = useState<number[]>([]);
   const [editDueDateInput, setEditDueDateInput] = useState(formatDisplayDate(today));
   const [editDueTimeInput, setEditDueTimeInput] = useState("09:00");
   const [editPriority, setEditPriority] = useState<TaskPriority>("MEDIUM");
@@ -417,6 +422,7 @@ function WorkspaceContent() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               title: op.task.title,
+              description: op.task.description,
               dueDate: op.task.dueDate,
               dueTime: op.task.dueTime,
               priority: op.task.priority,
@@ -743,8 +749,9 @@ function WorkspaceContent() {
         (filter === "overdue" && isOverdue);
 
       const matchesSearch = !searchTerm || task.title.toLowerCase().includes(searchTerm);
+      const matchesDescription = !searchTerm || (task.description || "").toLowerCase().includes(searchTerm);
 
-      return matchesFilter && matchesSearch;
+      return matchesFilter && (matchesSearch || matchesDescription);
     });
   }, [tasks, filter, search, today]);
 
@@ -899,6 +906,7 @@ function WorkspaceContent() {
       const created: Task = {
         id: Date.now(),
         title: cleanTitle,
+        description: description.trim() || null,
         dueDate: parsedDueDate,
         dueTime: dueTimeInput,
         completed: false,
@@ -908,6 +916,7 @@ function WorkspaceContent() {
       setTasks(nextTasks);
       writeGuestTasks(nextTasks);
       setTitle("");
+      setDescription("");
       setDueTimeInput("09:00");
       setPriority("MEDIUM");
       return;
@@ -917,6 +926,7 @@ function WorkspaceContent() {
       const offlineCreated: Task = {
         id: -Date.now(),
         title: cleanTitle,
+        description: description.trim() || null,
         dueDate: parsedDueDate,
         dueTime: dueTimeInput,
         completed: false,
@@ -925,6 +935,7 @@ function WorkspaceContent() {
       setTasks((current) => [...current, offlineCreated]);
       pushPendingAccountOp({ type: "create", task: offlineCreated, tempId: offlineCreated.id });
       setTitle("");
+      setDescription("");
       setDueTimeInput("09:00");
       setPriority("MEDIUM");
       return;
@@ -934,7 +945,13 @@ function WorkspaceContent() {
       const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: cleanTitle, dueDate: parsedDueDate, dueTime: dueTimeInput, priority }),
+        body: JSON.stringify({
+          title: cleanTitle,
+          description: description.trim() || "",
+          dueDate: parsedDueDate,
+          dueTime: dueTimeInput,
+          priority,
+        }),
       });
 
       if (!response.ok) {
@@ -947,6 +964,7 @@ function WorkspaceContent() {
       const offlineCreated: Task = {
         id: -Date.now(),
         title: cleanTitle,
+        description: description.trim() || null,
         dueDate: parsedDueDate,
         dueTime: dueTimeInput,
         completed: false,
@@ -957,6 +975,7 @@ function WorkspaceContent() {
     }
 
     setTitle("");
+    setDescription("");
     setDueTimeInput("09:00");
     setPriority("MEDIUM");
   };
@@ -964,6 +983,7 @@ function WorkspaceContent() {
   const startEditTask = (task: Task) => {
     setEditingTaskId(task.id);
     setEditTitle(task.title);
+    setEditDescription(task.description || "");
     setEditDueDateInput(formatDisplayDate(task.dueDate));
     setEditDueTimeInput(task.dueTime);
     setEditPriority(task.priority);
@@ -972,6 +992,7 @@ function WorkspaceContent() {
   const cancelEditTask = () => {
     setEditingTaskId(null);
     setEditTitle("");
+    setEditDescription("");
     setEditDueDateInput(formatDisplayDate(today));
     setEditDueTimeInput("09:00");
     setEditPriority("MEDIUM");
@@ -979,6 +1000,7 @@ function WorkspaceContent() {
 
   const saveTaskEdit = async (taskId: number) => {
     const cleanTitle = editTitle.trim();
+    const cleanDescription = editDescription.trim();
     const parsedEditDueDate = parseDisplayDate(editDueDateInput);
     if (!cleanTitle || !parsedEditDueDate || !isValidTime(editDueTimeInput)) {
       return;
@@ -990,6 +1012,7 @@ function WorkspaceContent() {
           ? {
               ...task,
               title: cleanTitle,
+              description: cleanDescription || null,
               dueDate: parsedEditDueDate,
               dueTime: editDueTimeInput,
               priority: editPriority,
@@ -1009,6 +1032,7 @@ function WorkspaceContent() {
             ? {
                 ...task,
                 title: cleanTitle,
+                description: cleanDescription || null,
                 dueDate: parsedEditDueDate,
                 dueTime: editDueTimeInput,
                 priority: editPriority,
@@ -1021,6 +1045,7 @@ function WorkspaceContent() {
         id: taskId,
         changes: {
           title: cleanTitle,
+          description: cleanDescription || null,
           dueDate: parsedEditDueDate,
           dueTime: editDueTimeInput,
           priority: editPriority,
@@ -1036,6 +1061,7 @@ function WorkspaceContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: cleanTitle,
+          description: cleanDescription || "",
           dueDate: parsedEditDueDate,
           dueTime: editDueTimeInput,
           priority: editPriority,
@@ -1055,6 +1081,7 @@ function WorkspaceContent() {
             ? {
                 ...task,
                 title: cleanTitle,
+                description: cleanDescription || null,
                 dueDate: parsedEditDueDate,
                 dueTime: editDueTimeInput,
                 priority: editPriority,
@@ -1067,6 +1094,7 @@ function WorkspaceContent() {
         id: taskId,
         changes: {
           title: cleanTitle,
+          description: cleanDescription || null,
           dueDate: parsedEditDueDate,
           dueTime: editDueTimeInput,
           priority: editPriority,
@@ -1140,6 +1168,12 @@ function WorkspaceContent() {
       setTasks((current) => current.filter((task) => task.id !== id));
       pushPendingAccountOp({ type: "delete", id });
     }
+  };
+
+  const toggleTaskExpanded = (taskId: number) => {
+    setExpandedTaskIds((current) =>
+      current.includes(taskId) ? current.filter((id) => id !== taskId) : [...current, taskId],
+    );
   };
 
   const goToPreviousMonth = () => {
@@ -1577,6 +1611,17 @@ function WorkspaceContent() {
                       : "border-slate-200 bg-white/70 text-slate-900"
                   }`}
                 />
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={2}
+                    placeholder="Add a note (optional)"
+                    className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                        : "border-slate-200 bg-white/70 text-slate-900"
+                    }`}
+                  />
                 <div className="grid gap-2 md:grid-cols-[1fr_130px_130px_auto]">
                   <div className="relative">
                     <input
@@ -1706,98 +1751,113 @@ function WorkspaceContent() {
                         } ${isOverdue ? "ring-1 ring-red-400/60" : ""}`}
                       >
                         {isEditing ? (
-                          <div className="grid gap-2 md:grid-cols-[1fr_160px_110px_130px_auto_auto]">
-                            <input
-                              value={editTitle}
-                              onChange={(event) => setEditTitle(event.target.value)}
-                              className={`rounded-lg border px-3 py-2 text-sm outline-none ${
-                                darkMode
-                                  ? "border-slate-700 bg-slate-900/70 text-slate-100"
-                                  : "border-slate-200 bg-white text-slate-900"
-                              }`}
-                            />
-                            <div className="relative">
+                          <div className="space-y-2">
+                            <div className="grid gap-2 md:grid-cols-[1fr_160px_110px_130px_auto_auto]">
                               <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="DD-MM-YYYY"
-                                value={editDueDateInput}
-                                onChange={(event) => setEditDueDateInput(event.target.value)}
-                                className={`w-full rounded-lg border px-3 py-2 pr-11 text-sm outline-none ${
+                                value={editTitle}
+                                onChange={(event) => setEditTitle(event.target.value)}
+                                className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                                    : "border-slate-200 bg-white text-slate-900"
+                                }`}
+                              />
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  placeholder="DD-MM-YYYY"
+                                  value={editDueDateInput}
+                                  onChange={(event) => setEditDueDateInput(event.target.value)}
+                                  className={`w-full rounded-lg border px-3 py-2 pr-11 text-sm outline-none ${
+                                    darkMode
+                                      ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                                      : "border-slate-200 bg-white text-slate-900"
+                                  }`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={openEditDatePicker}
+                                  className={`absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs ${
+                                    darkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100"
+                                  }`}
+                                  aria-label="Open edit date picker"
+                                >
+                                  📅
+                                </button>
+                                <input
+                                  ref={editDatePickerRef}
+                                  type="date"
+                                  defaultValue={today}
+                                  onChange={(event) => setEditDueDateInput(formatDisplayDate(event.target.value))}
+                                  className="absolute h-0 w-0 opacity-0 pointer-events-none"
+                                  tabIndex={-1}
+                                  aria-hidden
+                                />
+                              </div>
+                              <select
+                                value={editPriority}
+                                onChange={(event) => setEditPriority(event.target.value as TaskPriority)}
+                                className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/70 text-slate-100"
+                                    : "border-slate-200 bg-white text-slate-900"
+                                }`}
+                              >
+                                {PRIORITIES.map((item) => (
+                                  <option key={item} value={item}>
+                                    {item}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="time"
+                                value={editDueTimeInput}
+                                onChange={(event) => setEditDueTimeInput(event.target.value)}
+                                className={`rounded-lg border px-3 py-2 text-sm outline-none ${
                                   darkMode
                                     ? "border-slate-700 bg-slate-900/70 text-slate-100"
                                     : "border-slate-200 bg-white text-slate-900"
                                 }`}
                               />
                               <button
-                                type="button"
-                                onClick={openEditDatePicker}
-                                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs ${
-                                  darkMode ? "text-slate-200 hover:bg-slate-800" : "text-slate-700 hover:bg-slate-100"
-                                }`}
-                                aria-label="Open edit date picker"
+                                onClick={() => saveTaskEdit(task.id)}
+                                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
                               >
-                                📅
+                                Save
                               </button>
-                              <input
-                                ref={editDatePickerRef}
-                                type="date"
-                                defaultValue={today}
-                                onChange={(event) => setEditDueDateInput(formatDisplayDate(event.target.value))}
-                                className="absolute h-0 w-0 opacity-0 pointer-events-none"
-                                tabIndex={-1}
-                                aria-hidden
-                              />
+                              <button
+                                onClick={cancelEditTask}
+                                className="rounded-lg bg-slate-400 px-3 py-2 text-xs font-semibold text-white"
+                              >
+                                Cancel
+                              </button>
                             </div>
-                            <select
-                              value={editPriority}
-                              onChange={(event) => setEditPriority(event.target.value as TaskPriority)}
-                              className={`rounded-lg border px-3 py-2 text-sm outline-none ${
-                                darkMode
-                                  ? "border-slate-700 bg-slate-900/70 text-slate-100"
-                                  : "border-slate-200 bg-white text-slate-900"
-                              }`}
-                            >
-                              {PRIORITIES.map((item) => (
-                                <option key={item} value={item}>
-                                  {item}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              type="time"
-                              value={editDueTimeInput}
-                              onChange={(event) => setEditDueTimeInput(event.target.value)}
-                              className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                            <textarea
+                              value={editDescription}
+                              onChange={(event) => setEditDescription(event.target.value)}
+                              rows={2}
+                              placeholder="Task note (optional)"
+                              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none resize-none ${
                                 darkMode
                                   ? "border-slate-700 bg-slate-900/70 text-slate-100"
                                   : "border-slate-200 bg-white text-slate-900"
                               }`}
                             />
-                            <button
-                              onClick={() => saveTaskEdit(task.id)}
-                              className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={cancelEditTask}
-                              className="rounded-lg bg-slate-400 px-3 py-2 text-xs font-semibold text-white"
-                            >
-                              Cancel
-                            </button>
                           </div>
                         ) : (
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <p
+                                <button
+                                  type="button"
+                                  onClick={() => toggleTaskExpanded(task.id)}
                                   className={`font-semibold ${
                                     darkMode ? "text-slate-100" : "text-slate-900"
-                                  } ${task.completed ? "line-through opacity-70" : ""}`}
+                                  } ${task.completed ? "line-through opacity-70" : ""} text-left hover:opacity-90`}
                                 >
                                   {task.title}
-                                </p>
+                                </button>
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${getPriorityBadgeClass(task.priority)}`}>
                                   {task.priority}
                                 </span>
@@ -1805,6 +1865,17 @@ function WorkspaceContent() {
                               <p className={`mt-1 text-xs ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
                                 📅 {formatDisplayDate(task.dueDate)} at {task.dueTime} {isOverdue ? "• OVERDUE" : ""}
                               </p>
+                              {expandedTaskIds.includes(task.id) && (
+                                <div
+                                  className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+                                    darkMode
+                                      ? "border-slate-700 bg-slate-900/50 text-slate-300"
+                                      : "border-slate-200 bg-white/70 text-slate-700"
+                                  }`}
+                                >
+                                  {task.description?.trim() ? task.description : "No description added."}
+                                </div>
+                              )}
                             </div>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <button
