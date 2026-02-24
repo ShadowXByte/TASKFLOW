@@ -33,6 +33,19 @@ You can:
 - **Analytics Dashboard** (score, completion, overdue, distribution)
 - **Dark / Light Mode**
 - **Guest Mode** (no login required)
+- **Offline Support** (with auto sync when internet returns)
+
+---
+
+## 📴 Offline Support
+
+TASKFLOW works as an installable app and supports offline usage:
+
+- **Homepage + Guest Mode:** available offline (local storage)
+- **Account Mode (after previous login):** opens offline with cached tasks
+- **Offline edits in Account Mode:** changes are saved locally in a queue
+- **When internet returns:** queued changes sync automatically with your account
+- **App updates:** new app version is fetched in the background and applied on next open/refresh
 
 ---
 
