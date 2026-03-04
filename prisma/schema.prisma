@@ -45,6 +45,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
 }
 
 model Session {
@@ -53,6 +54,8 @@ model Session {
   userId       String
   expires      DateTime
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model VerificationToken {
@@ -81,6 +84,9 @@ model Task {
 
   @@index([userId, dueDate])
   @@index([routineId])
+  @@index([userId, completed])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }
 
 model PushSubscription {
@@ -93,6 +99,8 @@ model PushSubscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   notificationLogs NotificationLog[]
+
+  @@index([userId])
 }
 
 model NotificationLog {
@@ -106,6 +114,8 @@ model NotificationLog {
   pushSubscription   PushSubscription @relation(fields: [pushSubscriptionId], references: [id], onDelete: Cascade)
 
   @@unique([taskId, pushSubscriptionId, dueDate, dueTime])
+  @@index([taskId, pushSubscriptionId])
+  @@index([sentAt])
 }
 
 model Routine {
