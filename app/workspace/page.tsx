@@ -231,6 +231,29 @@ function PageContent() {
       });
   }, [session?.user?.email, session?.user?.name, status]);
 
+  // Persist session to localStorage for offline account access
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const CACHED_SESSION_KEY = "taskflow-cached-session";
+
+    // Save session when authenticated
+    if (status === "authenticated" && session?.user) {
+      safeStorageSetItem(CACHED_SESSION_KEY, JSON.stringify(session));
+    }
+
+    // Restore cached session when offline and not authenticated
+    if (status === "unauthenticated") {
+      const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
+      if (cachedSession && cachedSession.user) {
+        // Attempt to restore session for offline mode
+        update();
+      }
+    }
+  }, [status, session, update]);
+
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
