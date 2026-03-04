@@ -234,7 +234,7 @@ function PageContent() {
       });
   }, [session?.user?.email, session?.user?.name, status]);
 
-  // Check for cached session on mount (for returning users)
+  // Restore cached session when offline in account mode
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
@@ -243,19 +243,20 @@ function PageContent() {
     const CACHED_SESSION_KEY = "taskflow-cached-session";
     const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
 
-    // If no current session but we have a cached one and in account mode
-    if (
-      workspaceMode === "account" &&
-      status !== "authenticated" &&
-      cachedSession &&
-      cachedSession.user &&
-      !offlineAccountMode
-    ) {
-      setOfflineAccountMode(true);
-      setEmail(cachedSession.user.email || "");
-      setName(cachedSession.user.name || "");
+    // In account mode: check if we should use offline mode
+    if (workspaceMode === "account") {
+      // If unauthenticated and offline and have cached session, activate offline mode
+      if (status !== "authenticated" && isOffline && cachedSession && cachedSession.user) {
+        setOfflineAccountMode(true);
+        setEmail(cachedSession.user.email || "");
+        setName(cachedSession.user.name || "");
+      }
+      // If back online and authenticated, clear offline mode
+      else if (status === "authenticated" && !isOffline) {
+        setOfflineAccountMode(false);
+      }
     }
-  }, [status, workspaceMode]);
+  }, [status, workspaceMode, isOffline]);
 
   // Persist session to localStorage for offline account access
   useEffect(() => {
@@ -539,13 +540,14 @@ function PageContent() {
         return;
       }
 
-      // In account mode but not authenticated (online or offline)
+      // In account mode but not authenticated and not in offline mode
       if (status !== "authenticated" && !offlineAccountMode) {
         setTasks([]);
         return;
       }
 
-      if (isOffline) {
+      // Load from cache if offline OR in offline account mode
+      if (isOffline || offlineAccountMode) {
         setTasks(readAccountCachedTasks());
         return;
       }
@@ -566,7 +568,7 @@ function PageContent() {
     };
 
     void loadTasks();
-  }, [isOffline, readAccountCachedTasks, status, workspaceMode, writeAccountCachedTasks]);
+  }, [isOffline, offlineAccountMode, readAccountCachedTasks, status, workspaceMode, writeAccountCachedTasks]);
 
   useEffect(() => {
     if (workspaceMode !== "account" || status !== "authenticated") {
