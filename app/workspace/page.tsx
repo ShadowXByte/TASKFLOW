@@ -232,6 +232,29 @@ function PageContent() {
       });
   }, [session?.user?.email, session?.user?.name, status]);
 
+  // Check for cached session on mount (for returning users)
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const CACHED_SESSION_KEY = "taskflow-cached-session";
+    const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
+
+    // If no current session but we have a cached one and in account mode
+    if (
+      workspaceMode === "account" &&
+      status !== "authenticated" &&
+      cachedSession &&
+      cachedSession.user &&
+      !offlineAccountMode
+    ) {
+      setOfflineAccountMode(true);
+      setEmail(cachedSession.user.email || "");
+      setName(cachedSession.user.name || "");
+    }
+  }, [status, workspaceMode]);
+
   // Persist session to localStorage for offline account access
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -244,17 +267,6 @@ function PageContent() {
     if (status === "authenticated" && session?.user) {
       safeStorageSetItem(CACHED_SESSION_KEY, JSON.stringify(session));
       setOfflineAccountMode(false);
-    }
-
-    // Check if we're offline and should use cached session
-    if (isOffline && status === "unauthenticated") {
-      const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
-      if (cachedSession && cachedSession.user) {
-        // Use cached session for offline account mode
-        setOfflineAccountMode(true);
-        setEmail(cachedSession.user.email || "");
-        setName(cachedSession.user.name || "");
-      }
     }
 
     // Clear offline mode when back online and authenticated
