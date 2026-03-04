@@ -109,6 +109,7 @@ function PageContent() {
   const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [offlineAccountMode, setOfflineAccountMode] = useState(false);
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [deleteTaskDialogOpen, setDeleteTaskDialogOpen] = useState(false);
@@ -242,17 +243,25 @@ function PageContent() {
     // Save session when authenticated
     if (status === "authenticated" && session?.user) {
       safeStorageSetItem(CACHED_SESSION_KEY, JSON.stringify(session));
+      setOfflineAccountMode(false);
     }
 
-    // Restore cached session when offline and not authenticated
-    if (status === "unauthenticated") {
+    // Check if we're offline and should use cached session
+    if (isOffline && status === "unauthenticated") {
       const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
       if (cachedSession && cachedSession.user) {
-        // Attempt to restore session for offline mode
-        update();
+        // Use cached session for offline account mode
+        setOfflineAccountMode(true);
+        setEmail(cachedSession.user.email || "");
+        setName(cachedSession.user.name || "");
       }
     }
-  }, [status, session, update]);
+
+    // Clear offline mode when back online and authenticated
+    if (!isOffline && status === "authenticated") {
+      setOfflineAccountMode(false);
+    }
+  }, [status, session, isOffline]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1626,7 +1635,7 @@ function PageContent() {
       : "bg-amber-100/70 text-amber-700 border border-amber-200";
   };
 
-  const showAuthPanel = workspaceMode === "account" && status !== "authenticated";
+  const showAuthPanel = workspaceMode === "account" && status !== "authenticated" && !offlineAccountMode;
 
   const openAddDatePicker = () => {
     const picker = addDatePickerRef.current;
