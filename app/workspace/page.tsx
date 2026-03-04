@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import ClientWrapper from "./ClientWrapper";
@@ -57,6 +58,43 @@ import {
   SW_PATH,
 } from "./utils/constants";
 
+// Dynamic imports for code splitting (lazy load section components)
+const TodaySection = dynamic(() => import("./components/sections/TodaySection").then(mod => ({ default: mod.TodaySection })), {
+  loading: () => <SectionLoadingFallback />,
+  ssr: true,
+});
+
+const AllTasksSection = dynamic(() => import("./components/sections/AllTasksSection").then(mod => ({ default: mod.AllTasksSection })), {
+  loading: () => <SectionLoadingFallback />,
+  ssr: true,
+});
+
+const RoutineSection = dynamic(() => import("./components/sections/RoutineSection").then(mod => ({ default: mod.RoutineSection })), {
+  loading: () => <SectionLoadingFallback />,
+  ssr: true,
+});
+
+const AnalyticsSection = dynamic(() => import("./components/sections/AnalyticsSection").then(mod => ({ default: mod.AnalyticsSection })), {
+  loading: () => <SectionLoadingFallback />,
+  ssr: true,
+});
+
+const AccountSection = dynamic(() => import("./components/sections/AccountSection").then(mod => ({ default: mod.AccountSection })), {
+  loading: () => <SectionLoadingFallback />,
+  ssr: true,
+});
+
+// Loading fallback component for sections
+function SectionLoadingFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+        <p className="mt-4 text-slate-600">Loading section...</p>
+      </div>
+    </div>
+  );
+}
 function PageContent() {
   const params = useSearchParams();
   const modeFromQuery = params.get("mode") === "guest" ? "guest" : "account";
