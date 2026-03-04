@@ -52,6 +52,7 @@ import {
   NOTIFICATION_ASKED_KEY,
   NOTIFIED_TASKS_KEY,
   ACCOUNT_TASKS_CACHE_PREFIX,
+  ACCOUNT_ROUTINES_CACHE_PREFIX,
   ACCOUNT_PENDING_OPS_PREFIX,
   ACCOUNT_MIGRATION_DECISION_PREFIX,
   PRIORITIES,
@@ -189,6 +190,7 @@ function PageContent() {
   }, [session?.user?.email, session?.user?.id]);
 
   const accountTasksCacheKey = `${ACCOUNT_TASKS_CACHE_PREFIX}:${accountKey}`;
+  const accountRoutinesCacheKey = `${ACCOUNT_ROUTINES_CACHE_PREFIX}:${accountKey}`;
   const accountPendingOpsKey = `${ACCOUNT_PENDING_OPS_PREFIX}:${accountKey}`;
   const accountMigrationDecisionKey = `${ACCOUNT_MIGRATION_DECISION_PREFIX}:${accountKey}`;
   const routineCompletionsKey = workspaceMode === "guest"
@@ -386,6 +388,14 @@ function PageContent() {
     safeStorageSetItem(accountTasksCacheKey, JSON.stringify(nextTasks));
   }, [accountTasksCacheKey]);
 
+  const readAccountCachedRoutines = useCallback(() => {
+    return readJsonFromStorage<any[]>(accountRoutinesCacheKey, []);
+  }, [accountRoutinesCacheKey]);
+
+  const writeAccountCachedRoutines = useCallback((nextRoutines: any[]) => {
+    safeStorageSetItem(accountRoutinesCacheKey, JSON.stringify(nextRoutines));
+  }, [accountRoutinesCacheKey]);
+
   const readPendingAccountOps = useCallback(() => {
     return readJsonFromStorage<PendingAccountOperation[]>(accountPendingOpsKey, []);
   }, [accountPendingOpsKey]);
@@ -529,7 +539,8 @@ function PageContent() {
         return;
       }
 
-      if (status !== "authenticated") {
+      // In account mode but not authenticated (online or offline)
+      if (status !== "authenticated" && !offlineAccountMode) {
         setTasks([]);
         return;
       }
@@ -564,6 +575,14 @@ function PageContent() {
 
     writeAccountCachedTasks(tasks);
   }, [workspaceMode, status, tasks, writeAccountCachedTasks]);
+
+  useEffect(() => {
+    if (workspaceMode !== "account" || (!status && !offlineAccountMode)) {
+      return;
+    }
+
+    writeAccountCachedRoutines(routines);
+  }, [workspaceMode, status, offlineAccountMode, routines, writeAccountCachedRoutines]);
 
   useEffect(() => {
     const raw = safeStorageGetItem(routineCompletionsKey);
@@ -607,10 +626,10 @@ function PageContent() {
       return;
     }
 
-    if (workspaceMode === "account" && status === "authenticated") {
+    if (workspaceMode === "account" && (status === "authenticated" || offlineAccountMode)) {
       void fetchRoutines();
     }
-  }, [workspaceMode, status]);
+  }, [workspaceMode, status, offlineAccountMode]);
 
   // Refresh routines list when opening routine section
   useEffect(() => {
@@ -1493,15 +1512,33 @@ function PageContent() {
       if (workspaceMode === "guest") {
         const guestRoutines = readGuestRoutines();
         setRoutines(guestRoutines);
-      } else if (status === "authenticated") {
-        const response = await fetch("/api/routines");
-        if (response.ok) {
-          const data = await response.json();
-          setRoutines(data);
+      } else if (status === "authenticated" || offlineAccountMode) {
+        // In account mode: check online status
+        if (isOffline || offlineAccountMode) {
+          // Load from cache when offline
+          const cachedRoutines = readAccountCachedRoutines();
+          setRoutines(cachedRoutines);
+        } else {
+          // Fetch from API when online
+          const response = await fetch("/api/routines");
+          if (response.ok) {
+            const data = await response.json();
+            setRoutines(data);
+            writeAccountCachedRoutines(data);
+          } else {
+            // Fallback to cache if API fails
+            const cachedRoutines = readAccountCachedRoutines();
+            setRoutines(cachedRoutines);
+          }
         }
       }
     } catch (error) {
       console.error("Failed to fetch routines:", error);
+      // Load from cache on error
+      if (workspaceMode === "account") {
+        const cachedRoutines = readAccountCachedRoutines();
+        setRoutines(cachedRoutines);
+      }
     } finally {
       setLoadingRoutines(false);
     }
