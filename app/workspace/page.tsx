@@ -243,20 +243,19 @@ function PageContent() {
     const CACHED_SESSION_KEY = "taskflow-cached-session";
     const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
 
-    // In account mode: check if we should use offline mode
-    if (workspaceMode === "account") {
-      // If unauthenticated and offline and have cached session, activate offline mode
-      if (status !== "authenticated" && isOffline && cachedSession && cachedSession.user) {
+    // In account mode: check if offline with cached session
+    if (workspaceMode === "account" && cachedSession && cachedSession.user) {
+      if (isOffline) {
+        // Offline with cached session → use offline account mode
         setOfflineAccountMode(true);
         setEmail(cachedSession.user.email || "");
         setName(cachedSession.user.name || "");
-      }
-      // If back online and authenticated, clear offline mode
-      else if (status === "authenticated" && !isOffline) {
+      } else if (status === "authenticated") {
+        // Back online and authenticated → clear offline mode
         setOfflineAccountMode(false);
       }
     }
-  }, [status, workspaceMode, isOffline]);
+  }, [workspaceMode, isOffline, status]);
 
   // Persist session to localStorage for offline account access
   useEffect(() => {
@@ -540,15 +539,15 @@ function PageContent() {
         return;
       }
 
-      // In account mode but not authenticated and not in offline mode
-      if (status !== "authenticated" && !offlineAccountMode) {
-        setTasks([]);
+      // In account mode: check offline first (takes priority)
+      if (isOffline) {
+        setTasks(readAccountCachedTasks());
         return;
       }
 
-      // Load from cache if offline OR in offline account mode
-      if (isOffline || offlineAccountMode) {
-        setTasks(readAccountCachedTasks());
+      // Online in account mode: need authentication
+      if (status !== "authenticated") {
+        setTasks([]);
         return;
       }
 
@@ -568,7 +567,7 @@ function PageContent() {
     };
 
     void loadTasks();
-  }, [isOffline, offlineAccountMode, readAccountCachedTasks, status, workspaceMode, writeAccountCachedTasks]);
+  }, [isOffline, readAccountCachedTasks, status, workspaceMode, writeAccountCachedTasks]);
 
   useEffect(() => {
     if (workspaceMode !== "account" || status !== "authenticated") {
@@ -1515,8 +1514,8 @@ function PageContent() {
         const guestRoutines = readGuestRoutines();
         setRoutines(guestRoutines);
       } else if (status === "authenticated" || offlineAccountMode) {
-        // In account mode: check online status
-        if (isOffline || offlineAccountMode) {
+        // In account mode: check offline first  
+        if (isOffline) {
           // Load from cache when offline
           const cachedRoutines = readAccountCachedRoutines();
           setRoutines(cachedRoutines);
