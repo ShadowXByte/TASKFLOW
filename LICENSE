@@ -1,49 +1,33 @@
-TASKFLOW - RESTRICTED USE LICENSE
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
 
 Copyright (c) 2026 ShadowXByte
 
-PERMISSIONS GRANTED:
-✓ Fork publicly on GitHub (fork maintains visible attribution to original)
-✓ Clone and test locally on your own machine
-✓ Contribute improvements via pull requests
-✓ Study the code for learning purposes
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-RESTRICTIONS:
-✗ Cannot upload code to a separate, independent repository (GitHub, GitLab, Bitbucket, etc.)
-✗ Cannot remove or obscure the fork relationship or attribution to the original TASKFLOW repository
-✗ Cannot deploy, host, or run publicly on the internet
-✗ Cannot deploy as a standalone service (web app, API, etc.)
-✗ Cannot redistribute, publish, or sell this software
-✗ Cannot use this code (or substantial parts of it) in other projects
-✗ Cannot use components or code snippets in other codebases
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
 
-TERMS:
-1. This software is provided "as-is" for personal, non-commercial use only.
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-2. You are allowed to:
-   - Fork publicly on GitHub (fork must maintain visible attribution to original TASKFLOW repository)
-   - Clone to your local machine for personal testing
-   - Submit contributions/pull requests to the original repository
-   - Study and learn from the code
+---
 
-3. You are NOT allowed to:
-   - Upload this code to any separate, independent repository (cloning then uploading elsewhere is prohibited)
-   - Remove, obscure, or hide the fork relationship or attribution
-   - Host or deploy this application/code anywhere publicly
-   - Run this as a production service (your own domain, cloud hosting, etc.)
-   - Extract components or code snippets for use in other projects
-   - Create standalone applications using this codebase
-   - Redistribute or share your modified version outside of your GitHub fork
+IN PLAIN ENGLISH
 
-4. Any contributions you make (via pull requests) will become part of the original project under these same terms.
+You are free to:
+✓ Use, study, and modify this code
+✓ Run this software on your own servers
+✓ Deploy and commercialize your own version
+✓ Fork and contribute improvements
 
-5. The original author retains all rights to this code and may choose to relicense or commercialize at any time.
+BUT, if you provide TASKFLOW as a service to others (SaaS/hosting),
+you MUST open-source your modifications under AGPL 3.0.
+You must also maintain visible attribution to ShadowXByte.
 
-For commercial licensing or exceptions to these restrictions, contact the author.
-
-WITHOUT LIMITING THE FOREGOING, THIS SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS 
-ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL THE AUTHOR BE LIABLE 
-FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR 
-OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
-DEALINGS IN THE SOFTWARE.
+For the full legal text, see: https://www.gnu.org/licenses/agpl-3.0.html

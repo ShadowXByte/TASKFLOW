@@ -122,26 +122,34 @@ http://localhost:3000
 
 ## 📝 License & Contribution
 
-TASKFLOW is public for learning and collaboration, but it is not fully open source.
+TASKFLOW is licensed under **AGPL 3.0** — open source with community in mind.
 
-### You may:
+### What This Means
 
-- Fork and explore the code publicly on GitHub (keep attribution to ShadowXByte)
-- Study the code to learn and improve your skills
-- Contribute improvements via Pull Requests
+You can:
+- ✅ **Use & Deploy** — Run TASKFLOW for your business or personal use
+- ✅ **Study & Learn** — Explore the code to understand how it works
+- ✅ **Modify & Improve** — Fork it and make changes
+- ✅ **Contribute** — Submit pull requests with improvements
+- ✅ **Commercialize** — Build a service or product using TASKFLOW
 
-### You may NOT:
+The only requirement:
+- If you provide TASKFLOW as a service (SaaS/hosted), any modifications must be open-sourced under AGPL 3.0
+- You must keep attribution to ShadowXByte visible
 
-- Deploy TASKFLOW publicly or host it as a competing service
-- Use this code commercially
-- Remove or obscure the original attribution
-- Reuse substantial parts of the code in other projects
+### Contributing
 
-### Contributions
+We love contributions! Whether it's:
+- 🐛 Bug fixes
+- ✨ New features
+- 📚 Documentation improvements
+- 🎨 UI/UX enhancements
 
-All contributions merged into this repository remain under these terms.
+**Your code, ideas, and feedback matter.** All contributions benefit the entire community.
 
-Thank you for helping improve TASKFLOW — your contributions are always welcome! ❤️
+Thank you for helping make TASKFLOW better! ❤️
+
+**License:** [GNU AGPL 3.0](https://www.gnu.org/licenses/agpl-3.0.html)
 
 ---
 
