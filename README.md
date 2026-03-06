@@ -120,6 +120,31 @@ http://localhost:3000
 
 ---
 
+## 📝 License & Contribution
+
+TASKFLOW is public for learning and collaboration, but it is not fully open source.
+
+### You may:
+
+- Fork and explore the code publicly on GitHub (keep attribution to ShadowXByte)
+- Study the code to learn and improve your skills
+- Contribute improvements via Pull Requests
+
+### You may NOT:
+
+- Deploy TASKFLOW publicly or host it as a competing service
+- Use this code commercially
+- Remove or obscure the original attribution
+- Reuse substantial parts of the code in other projects
+
+### Contributions
+
+All contributions merged into this repository remain under these terms.
+
+Thank you for helping improve TASKFLOW — your contributions are always welcome! ❤️
+
+---
+
 ## ❤️ Built by
 
 **ShadowXByte**
