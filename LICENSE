@@ -1,0 +1,49 @@
+TASKFLOW - RESTRICTED USE LICENSE
+
+Copyright (c) 2026 ShadowXByte
+
+PERMISSIONS GRANTED:
+✓ Fork publicly on GitHub (fork maintains visible attribution to original)
+✓ Clone and test locally on your own machine
+✓ Contribute improvements via pull requests
+✓ Study the code for learning purposes
+
+RESTRICTIONS:
+✗ Cannot upload code to a separate, independent repository (GitHub, GitLab, Bitbucket, etc.)
+✗ Cannot remove or obscure the fork relationship or attribution to the original TASKFLOW repository
+✗ Cannot deploy, host, or run publicly on the internet
+✗ Cannot deploy as a standalone service (web app, API, etc.)
+✗ Cannot redistribute, publish, or sell this software
+✗ Cannot use this code (or substantial parts of it) in other projects
+✗ Cannot use components or code snippets in other codebases
+
+TERMS:
+1. This software is provided "as-is" for personal, non-commercial use only.
+
+2. You are allowed to:
+   - Fork publicly on GitHub (fork must maintain visible attribution to original TASKFLOW repository)
+   - Clone to your local machine for personal testing
+   - Submit contributions/pull requests to the original repository
+   - Study and learn from the code
+
+3. You are NOT allowed to:
+   - Upload this code to any separate, independent repository (cloning then uploading elsewhere is prohibited)
+   - Remove, obscure, or hide the fork relationship or attribution
+   - Host or deploy this application/code anywhere publicly
+   - Run this as a production service (your own domain, cloud hosting, etc.)
+   - Extract components or code snippets for use in other projects
+   - Create standalone applications using this codebase
+   - Redistribute or share your modified version outside of your GitHub fork
+
+4. Any contributions you make (via pull requests) will become part of the original project under these same terms.
+
+5. The original author retains all rights to this code and may choose to relicense or commercialize at any time.
+
+For commercial licensing or exceptions to these restrictions, contact the author.
+
+WITHOUT LIMITING THE FOREGOING, THIS SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS 
+ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL THE AUTHOR BE LIABLE 
+FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR 
+OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+DEALINGS IN THE SOFTWARE.

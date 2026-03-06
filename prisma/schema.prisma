@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  dateOfBirth   DateTime?
+  image         String?
+  password      String
+  accounts      Account[]
+  sessions      Session[]
+  tasks         Task[]
+  routines      Routine[]
+  pushSubscriptions PushSubscription[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Task {
+  id        Int      @id @default(autoincrement())
+  title     String
+  description String?
+  dueDate   String
+  dueTime   String   @default("09:00")
+  completed Boolean  @default(false)
+  priority  TaskPriority @default(MEDIUM)
+  routineId Int?     // Link to routine that generated this task
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  routine   Routine? @relation(fields: [routineId], references: [id], onDelete: SetNull)
+  notificationLogs NotificationLog[]
+
+  @@index([userId, dueDate])
+  @@index([routineId])
+  @@index([userId, completed])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notificationLogs NotificationLog[]
+
+  @@index([userId])
+}
+
+model NotificationLog {
+  id                 String   @id @default(cuid())
+  taskId             Int
+  pushSubscriptionId String
+  dueDate            String
+  dueTime            String
+  sentAt             DateTime @default(now())
+  task               Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  pushSubscription   PushSubscription @relation(fields: [pushSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, pushSubscriptionId, dueDate, dueTime])
+  @@index([taskId, pushSubscriptionId])
+  @@index([sentAt])
+}
+
+model Routine {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  dayOfWeek   Int      // 0=Sunday, 1=Monday, ..., 6=Saturday, 7=Daily
+  time        String   // HH:MM format
+  priority    TaskPriority @default(MEDIUM)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks       Task[]   // Tasks generated from this routine
+
+  @@index([userId, dayOfWeek])
+  @@index([userId, isActive])
+}
