@@ -7,6 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import ClientWrapper from "./ClientWrapper";
+import { ConfirmDialog } from "./components/shared/ConfirmDialog";
+import { PriorityBadge } from "./components/shared/PriorityBadge";
+import { AlertMessage } from "./components/shared/AlertMessage";
 
 // Types
 import type {
@@ -170,6 +173,17 @@ function PageContent() {
   const [routineTime, setRoutineTime] = useState("09:00");
   const [routinePriority, setRoutinePriority] = useState<TaskPriority>("MEDIUM");
   const [editingRoutineId, setEditingRoutineId] = useState<number | null>(null);
+  const [editRoutineTitle, setEditRoutineTitle] = useState("");
+  const [editRoutineDescription, setEditRoutineDescription] = useState("");
+  const [editRoutineDayOfWeek, setEditRoutineDayOfWeek] = useState<number>(7);
+  const [editRoutineTime, setEditRoutineTime] = useState("09:00");
+  const [editRoutinePriority, setEditRoutinePriority] = useState<TaskPriority>("MEDIUM");
+  const [expandedRoutineIds, setExpandedRoutineIds] = useState<number[]>([]);
+  const [deleteRoutineDialogOpen, setDeleteRoutineDialogOpen] = useState(false);
+  const [pendingRoutineDeleteId, setPendingRoutineDeleteId] = useState<number | null>(null);
+  const [deleteRoutineBusy, setDeleteRoutineBusy] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
+  const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
   const [loadingRoutines, setLoadingRoutines] = useState(false);
   const [nextGuestRoutineId, setNextGuestRoutineId] = useState(1);
   const [completedRoutineKeys, setCompletedRoutineKeys] = useState<string[]>([]);
@@ -1440,6 +1454,12 @@ function PageContent() {
     );
   };
 
+  const toggleRoutineExpanded = (routineId: number) => {
+    setExpandedRoutineIds((current) =>
+      current.includes(routineId) ? current.filter((id) => id !== routineId) : [...current, routineId],
+    );
+  };
+
   // Routine management functions
   const fetchRoutines = async () => {
     setLoadingRoutines(true);
@@ -1569,11 +1589,107 @@ function PageContent() {
     }
   };
 
-  const deleteRoutine = async (id: number) => {
-    const shouldDelete = window.confirm("Delete this routine? This action cannot be undone.");
-    if (!shouldDelete) {
+  const startEditRoutine = (routine: import("./types").Routine) => {
+    setEditingRoutineId(routine.id);
+    setEditRoutineTitle(routine.title);
+    setEditRoutineDescription(routine.description || "");
+    setEditRoutineDayOfWeek(routine.dayOfWeek);
+    setEditRoutineTime(routine.time);
+    setEditRoutinePriority(routine.priority);
+  };
+
+  const cancelEditRoutine = () => {
+    setEditingRoutineId(null);
+    setEditRoutineTitle("");
+    setEditRoutineDescription("");
+    setEditRoutineDayOfWeek(7);
+    setEditRoutineTime("09:00");
+    setEditRoutinePriority("MEDIUM");
+  };
+
+  const saveRoutineEdit = async (routineId: number) => {
+    const cleanTitle = editRoutineTitle.trim();
+    if (!cleanTitle || !isValidTime(editRoutineTime)) {
       return;
     }
+
+    if (workspaceMode === "guest") {
+      const updated = routines.map((r) =>
+        r.id === routineId
+          ? {
+              ...r,
+              title: cleanTitle,
+              description: editRoutineDescription.trim() || null,
+              dayOfWeek: editRoutineDayOfWeek,
+              time: editRoutineTime,
+              priority: editRoutinePriority,
+            }
+          : r
+      );
+      setRoutines(updated);
+      writeGuestRoutines(updated);
+      cancelEditRoutine();
+      return;
+    }
+
+    if (isOffline || offlineAccountMode) {
+      const updated = routines.map((r) =>
+        r.id === routineId
+          ? {
+              ...r,
+              title: cleanTitle,
+              description: editRoutineDescription.trim() || null,
+              dayOfWeek: editRoutineDayOfWeek,
+              time: editRoutineTime,
+              priority: editRoutinePriority,
+            }
+          : r
+      );
+      setRoutines(updated);
+      writeAccountCachedRoutines(updated);
+      if (routineId > 0) {
+        pushPendingRoutineOp({
+          type: "update",
+          id: routineId,
+          changes: {
+            title: cleanTitle,
+            description: editRoutineDescription.trim() || null,
+            dayOfWeek: editRoutineDayOfWeek,
+            time: editRoutineTime,
+            priority: editRoutinePriority,
+          },
+        });
+      }
+      cancelEditRoutine();
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/routines/${routineId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: cleanTitle,
+          description: editRoutineDescription.trim() || null,
+          dayOfWeek: editRoutineDayOfWeek,
+          time: editRoutineTime,
+          priority: editRoutinePriority,
+        }),
+      });
+
+      if (response.ok) {
+        const updatedRoutine = await response.json();
+        const updated = routines.map((r) => (r.id === routineId ? updatedRoutine : r));
+        setRoutines(updated);
+        writeAccountCachedRoutines(updated);
+        cancelEditRoutine();
+      }
+    } catch (error) {
+      console.error("Failed to update routine:", error);
+    }
+  };
+
+  const deleteRoutine = async (id: number) => {
 
     if (workspaceMode === "guest") {
       // Guest mode: delete from localStorage
@@ -1612,6 +1728,51 @@ function PageContent() {
         }
       }
     }
+  };
+
+  const requestRoutineDelete = (id: number) => {
+    setPendingRoutineDeleteId(id);
+    setDeleteRoutineDialogOpen(true);
+  };
+
+  const closeDeleteRoutineDialog = () => {
+    if (deleteRoutineBusy) {
+      return;
+    }
+
+    setDeleteRoutineDialogOpen(false);
+    setPendingRoutineDeleteId(null);
+  };
+
+  const confirmDeleteRoutine = async () => {
+    if (pendingRoutineDeleteId === null) {
+      return;
+    }
+
+    setDeleteRoutineBusy(true);
+    await deleteRoutine(pendingRoutineDeleteId);
+    setDeleteRoutineBusy(false);
+    setDeleteRoutineDialogOpen(false);
+    setPendingRoutineDeleteId(null);
+  };
+
+  const openDeleteAccountDialog = () => {
+    setDeleteAccountDialogOpen(true);
+  };
+
+  const closeDeleteAccountDialog = () => {
+    if (deleteAccountBusy) {
+      return;
+    }
+
+    setDeleteAccountDialogOpen(false);
+  };
+
+  const confirmDeleteAccount = async () => {
+    setDeleteAccountBusy(true);
+    await deleteAccount(clearCachedAccountSession, "/");
+    setDeleteAccountBusy(false);
+    setDeleteAccountDialogOpen(false);
   };
 
   const toggleRoutineActive = async (id: number, currentActive: boolean) => {
@@ -2502,72 +2663,117 @@ function PageContent() {
 
                   {/* Today Tasks List */}
                   <div className="min-w-0">
-                    <h3 className={`text-2xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
-                      {tasksForSelectedDay.length} task{tasksForSelectedDay.length !== 1 ? 's' : ''} for {formatDisplayDate(selectedDate)}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className={`text-2xl font-bold tracking-tight ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
+                        {formatDisplayDate(selectedDate)}
+                      </h3>
+                      {tasksForSelectedDay.length > 0 && (
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          darkMode ? "bg-blue-500/20 text-blue-200 border-blue-500/30" : "bg-blue-50 text-blue-700 border-blue-200"
+                        }`}>
+                          {tasksForSelectedDay.length} task{tasksForSelectedDay.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
                     <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                       {tasksForSelectedDay.length === 0 ? (
-                        <li className={`rounded-lg border-2 border-dashed p-4 text-sm text-center ${
+                        <li className={`relative overflow-hidden rounded-xl border-2 border-dashed p-6 text-center ${
                           darkMode ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-600"
                         }`}>
-                          <span className="text-2xl block mb-2">✨</span>
-                          All clear! Enjoy your free time.
+                          <div className="text-4xl mb-3 animate-bounce">✨</div>
+                          <p className="text-base font-bold mb-1">All clear!</p>
+                          <p className="text-xs opacity-75">Enjoy your free time.</p>
+                          <div className={`absolute top-4 right-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
+                            darkMode ? "bg-blue-500" : "bg-blue-400"
+                          }`} />
+                          <div className={`absolute bottom-4 left-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
+                            darkMode ? "bg-purple-500" : "bg-purple-400"
+                          }`} />
                         </li>
                       ) : (
-                        tasksForSelectedDay.map((task) => (
-                          <li
-                            key={task.id}
-                            className={`rounded-lg border p-3 backdrop-blur-sm transition overflow-hidden ${
-                              darkMode
-                                ? "bg-slate-900/40 border-slate-700 hover:bg-slate-900/60"
-                                : "bg-white/50 border-slate-200/50 hover:bg-white/70"
-                            }`}
-                          >
-                            <div className="flex items-start justify-between gap-2 min-w-0">
-                              <div className="flex-1 min-w-0">
-                                <button
-                                  onClick={() => toggleTaskExpanded(task.id)}
-                                  className={`w-full text-left font-semibold break-all ${
-                                    darkMode ? "text-slate-100" : "text-slate-900"
-                                  } ${task.completed ? "line-through opacity-60" : ""}`}
-                                >
-                                  {task.title}
-                                </button>
-                                <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                                  {task.dueTime} • <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                    task.priority === "HIGH" ? (darkMode ? "bg-red-500/25 text-red-200" : "bg-red-100 text-red-700") :
-                                    task.priority === "LOW" ? (darkMode ? "bg-emerald-500/25 text-emerald-200" : "bg-emerald-100 text-emerald-700") :
-                                    darkMode ? "bg-amber-500/25 text-amber-200" : "bg-amber-100 text-amber-700"
-                                  }`}>{task.priority}</span>
-                                  {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                    darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
-                                  }`}>🔁 Routine</span>}
-                                </p>
-                                {expandedTaskIds.includes(task.id) && task.description && (
-                                  <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
-                                    darkMode
-                                      ? "border-slate-700 bg-slate-900/50 text-slate-300"
-                                      : "border-slate-200 bg-white/70 text-slate-700"
-                                  }`}>
-                                    {task.description}
+                        tasksForSelectedDay.map((task) => {
+                          const priorityConfig = {
+                            HIGH: { icon: '🔴', color: darkMode ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200' },
+                            MEDIUM: { icon: '🟡', color: darkMode ? 'bg-amber-500/20 text-amber-200 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' },
+                            LOW: { icon: '🟢', color: darkMode ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                          };
+                          const priority = priorityConfig[task.priority];
+                          
+                          return (
+                            <li
+                              key={task.id}
+                              onClick={() => toggleTaskExpanded(task.id)}
+                              className={`group relative rounded-xl border p-3 backdrop-blur-sm shadow-lg transition-all duration-300 hover:scale-[1.01] hover:shadow-xl overflow-hidden ${
+                                darkMode
+                                  ? "bg-slate-900/60 border-slate-700/50 hover:bg-slate-900/70"
+                                  : "bg-white/60 border-slate-200/60 hover:bg-white/80"
+                              } cursor-pointer`}
+                            >
+                              {/* Hover glow effect */}
+                              <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${
+                                darkMode ? "from-blue-500/5 to-purple-500/5" : "from-blue-400/10 to-purple-400/10"
+                              }`} />
+                              
+                              <div className="relative flex items-start justify-between gap-3 min-w-0">
+                                <div className="flex-1 min-w-0 space-y-2">
+                                  <p
+                                    className={`w-full text-left text-base font-bold break-all transition-colors ${
+                                      darkMode ? "text-slate-100" : "text-slate-900"
+                                    } ${task.completed ? "line-through opacity-60" : ""}`}
+                                  >
+                                    {task.title}
+                                  </p>
+                                  
+                                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${priority.color}`}>
+                                      <span className="text-sm">{priority.icon}</span>
+                                      {task.priority}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      darkMode ? "bg-slate-800/60 text-slate-300" : "bg-slate-100/80 text-slate-700"
+                                    }`}>
+                                      <span>⏰</span>
+                                      {task.dueTime}
+                                    </span>
+                                    {task.routineId && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+                                        darkMode ? "bg-blue-500/20 text-blue-200 border-blue-500/30" : "bg-blue-50 text-blue-700 border-blue-200"
+                                      }`}>
+                                        🔁 Routine
+                                      </span>
+                                    )}
                                   </div>
-                                )}
+                                  
+                                  {expandedTaskIds.includes(task.id) && task.description && (
+                                    <div className={`mt-2 rounded-lg border px-3 py-2 text-xs backdrop-blur-sm ${
+                                      darkMode
+                                        ? "border-slate-700 bg-slate-900/70 text-slate-300"
+                                        : "border-slate-200 bg-white/80 text-slate-700"
+                                    }`}>
+                                      {task.description}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <div className="flex gap-2 shrink-0">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleTask(task.id, task.completed);
+                                    }}
+                                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-md hover:shadow-lg ${
+                                      task.completed
+                                        ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700"
+                                        : "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-600"
+                                    }`}
+                                  >
+                                    {task.completed ? "Undo" : "Done"}
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex gap-1 shrink-0">
-                                <button
-                                  onClick={() => toggleTask(task.id, task.completed)}
-                                  className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
-                                    task.completed
-                                      ? "bg-amber-600 text-white hover:bg-amber-700"
-                                      : "bg-emerald-100/60 text-emerald-700 hover:bg-emerald-200"
-                                  }`}
-                                >
-                                  {task.completed ? "Undo" : "Done"}
-                                </button>
-                              </div>
-                            </div>
-                          </li>
-                        ))
+                            </li>
+                          );
+                        })
                       )}
                     </ul>
                   </div>
@@ -2743,61 +2949,147 @@ function PageContent() {
                             : "bg-white/50 border-slate-200/50 hover:bg-white/70"
                         }`}
                       >
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 min-w-0">
-                          <div className="flex-1 min-w-0">
-                            <button
-                              onClick={() => toggleTaskExpanded(task.id)}
-                              className={`w-full text-left font-semibold break-all ${darkMode ? "text-slate-100" : "text-slate-900"} ${task.completed ? "line-through opacity-60" : ""}`}
-                            >
-                              {task.title}
-                            </button>
-                            <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                              {formatDisplayDate(task.dueDate)} at {task.dueTime} • <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                task.priority === "HIGH" ? (darkMode ? "bg-red-500/25 text-red-200" : "bg-red-100 text-red-700") :
-                                task.priority === "LOW" ? (darkMode ? "bg-emerald-500/25 text-emerald-200" : "bg-emerald-100 text-emerald-700") :
-                                darkMode ? "bg-amber-500/25 text-amber-200" : "bg-amber-100 text-amber-700"
-                              }`}>{task.priority}</span>
-                              {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
-                              }`}>🔁 Routine</span>}
-                            </p>
-                            {expandedTaskIds.includes(task.id) && task.description && (
-                              <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+                        {editingTaskId === task.id ? (
+                          /* EDIT MODE */
+                          <div className="space-y-3">
+                            <input
+                              value={editTitle}
+                              onChange={(e) => setEditTitle(e.target.value)}
+                              placeholder="Task title"
+                              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
                                 darkMode
-                                  ? "border-slate-700 bg-slate-900/50 text-slate-300"
-                                  : "border-slate-200 bg-white/70 text-slate-700"
-                              }`}>
-                                {task.description}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button
-                              onClick={() => toggleTask(task.id, task.completed)}
-                              className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
-                                task.completed
-                                  ? "bg-amber-600 text-white hover:bg-amber-700"
-                                  : "bg-emerald-100/60 text-emerald-700 hover:bg-emerald-200"
+                                  ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                  : "border-slate-200 bg-white/70 text-slate-900"
                               }`}
-                            >
-                              {task.completed ? "Undo" : "Done"}
-                            </button>
-                            <button
-                              onClick={() => startEditTask(task)}
-                              className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
-                                darkMode ? "bg-slate-700 text-slate-100 hover:bg-slate-600" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                            />
+                            <textarea
+                              value={editDescription}
+                              onChange={(e) => setEditDescription(e.target.value)}
+                              placeholder="Description (optional)"
+                              rows={2}
+                              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none resize-none ${
+                                darkMode
+                                  ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                  : "border-slate-200 bg-white/70 text-slate-900"
                               }`}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => removeTask(task.id)}
-                              className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                            >
-                              Delete
-                            </button>
+                            />
+                            <div className="grid gap-2 sm:grid-cols-[1fr_100px_120px]">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="DD-MM-YYYY"
+                                value={editDueDateInput}
+                                onChange={(e) => setEditDueDateInput(e.target.value)}
+                                onClick={openEditDatePicker}
+                                className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                    : "border-slate-200 bg-white/70 text-slate-900"
+                                }`}
+                              />
+                              <input
+                                ref={editDatePickerRef}
+                                type="date"
+                                onChange={(e) => setEditDueDateInput(formatDisplayDate(e.target.value))}
+                                className="hidden"
+                              />
+                              <input
+                                type="time"
+                                value={editDueTimeInput}
+                                onChange={(e) => setEditDueTimeInput(e.target.value)}
+                                className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                    : "border-slate-200 bg-white/70 text-slate-900"
+                                }`}
+                              />
+                              <select
+                                value={editPriority}
+                                onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
+                                className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                    : "border-slate-200 bg-white/70 text-slate-900"
+                                }`}
+                              >
+                                <option>LOW</option>
+                                <option>MEDIUM</option>
+                                <option>HIGH</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => saveTaskEdit(task.id)}
+                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditTask}
+                                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                                  darkMode
+                                    ? "bg-slate-700 text-slate-100 hover:bg-slate-600"
+                                    : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                }`}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          /* DISPLAY MODE */
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 min-w-0">
+                            <div className="flex-1 min-w-0">
+                              <button
+                                onClick={() => toggleTaskExpanded(task.id)}
+                                className={`w-full text-left font-semibold break-all ${darkMode ? "text-slate-100" : "text-slate-900"} ${task.completed ? "line-through opacity-60" : ""}`}
+                              >
+                                {task.title}
+                              </button>
+                              <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                {formatDisplayDate(task.dueDate)} at {task.dueTime} • <PriorityBadge priority={task.priority} darkMode={darkMode} />
+                                {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                  darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
+                                }`}>🔁 Routine</span>}
+                              </p>
+                              {expandedTaskIds.includes(task.id) && task.description && (
+                                <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
+                                  darkMode
+                                    ? "border-slate-700 bg-slate-900/50 text-slate-300"
+                                    : "border-slate-200 bg-white/70 text-slate-700"
+                                }`}>
+                                  {task.description}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => toggleTask(task.id, task.completed)}
+                                className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                  task.completed
+                                    ? "bg-amber-600 text-white hover:bg-amber-700"
+                                    : "bg-emerald-100/60 text-emerald-700 hover:bg-emerald-200"
+                                }`}
+                              >
+                                {task.completed ? "Undo" : "Done"}
+                              </button>
+                              <button
+                                onClick={() => startEditTask(task)}
+                                className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                  darkMode ? "bg-slate-700 text-slate-100 hover:bg-slate-600" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                }`}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => removeTask(task.id)}
+                                className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </li>
                     ))
                   )}
@@ -3112,50 +3404,153 @@ function PageContent() {
                               .map(routine => (
                                 <div 
                                   key={routine.id}
+                                  onClick={() => toggleRoutineExpanded(routine.id)}
                                   className={`rounded-lg border p-3 backdrop-blur-sm transition ${
                                     darkMode
                                       ? "bg-slate-900/40 border-slate-700"
                                       : "bg-white/50 border-slate-200/50"
-                                  } ${!routine.isActive ? "opacity-50" : ""}`}
+                                  } ${!routine.isActive ? "opacity-50" : ""} cursor-pointer`}
                                 >
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                      <p className={`font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
-                                        {routine.title}
-                                      </p>
-                                      <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                                        {routine.time} • <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                          routine.priority === "HIGH" ? (darkMode ? "bg-red-500/25 text-red-200" : "bg-red-100 text-red-700") :
-                                          routine.priority === "LOW" ? (darkMode ? "bg-emerald-500/25 text-emerald-200" : "bg-emerald-100 text-emerald-700") :
-                                          darkMode ? "bg-amber-500/25 text-amber-200" : "bg-amber-100 text-amber-700"
-                                        }`}>{routine.priority}</span>
-                                        {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
-                                      </p>
-                                      {routine.description && (
-                                        <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                                          {routine.description}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div className="flex gap-1 shrink-0">
-                                      <button
-                                        onClick={() => toggleRoutineActive(routine.id, routine.isActive)}
-                                        className={`rounded px-2 py-1 text-xs font-semibold ${
-                                          routine.isActive
-                                            ? "bg-emerald-100/60 text-emerald-700"
-                                            : "bg-amber-100/60 text-amber-700"
+                                  {editingRoutineId === routine.id ? (
+                                    <div className="space-y-3">
+                                      <input
+                                        value={editRoutineTitle}
+                                        onChange={(e) => setEditRoutineTitle(e.target.value)}
+                                        placeholder="Routine title"
+                                        className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
+                                          darkMode
+                                            ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                            : "border-slate-200 bg-white/70 text-slate-900"
                                         }`}
-                                      >
-                                        {routine.isActive ? "Active" : "Inactive"}
-                                      </button>
-                                      <button
-                                        onClick={() => deleteRoutine(routine.id)}
-                                        className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                                      >
-                                        Delete
-                                      </button>
+                                      />
+                                      <textarea
+                                        value={editRoutineDescription}
+                                        onChange={(e) => setEditRoutineDescription(e.target.value)}
+                                        placeholder="Description (optional)"
+                                        rows={2}
+                                        className={`w-full rounded-lg border px-3 py-2 text-sm outline-none resize-none ${
+                                          darkMode
+                                            ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                            : "border-slate-200 bg-white/70 text-slate-900"
+                                        }`}
+                                      />
+                                      <div className="grid gap-2 sm:grid-cols-[1fr_100px_120px]">
+                                        <select
+                                          value={editRoutineDayOfWeek}
+                                          onChange={(e) => setEditRoutineDayOfWeek(Number(e.target.value))}
+                                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                            darkMode
+                                              ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                              : "border-slate-200 bg-white/70 text-slate-900"
+                                          }`}
+                                        >
+                                          <option value={7}>Daily</option>
+                                          <option value={0}>Sunday</option>
+                                          <option value={1}>Monday</option>
+                                          <option value={2}>Tuesday</option>
+                                          <option value={3}>Wednesday</option>
+                                          <option value={4}>Thursday</option>
+                                          <option value={5}>Friday</option>
+                                          <option value={6}>Saturday</option>
+                                        </select>
+                                        <input
+                                          type="time"
+                                          value={editRoutineTime}
+                                          onChange={(e) => setEditRoutineTime(e.target.value)}
+                                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                            darkMode
+                                              ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                              : "border-slate-200 bg-white/70 text-slate-900"
+                                          }`}
+                                        />
+                                        <select
+                                          value={editRoutinePriority}
+                                          onChange={(e) => setEditRoutinePriority(e.target.value as TaskPriority)}
+                                          className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                            darkMode
+                                              ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                              : "border-slate-200 bg-white/70 text-slate-900"
+                                          }`}
+                                        >
+                                          <option>LOW</option>
+                                          <option>MEDIUM</option>
+                                          <option>HIGH</option>
+                                        </select>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => saveRoutineEdit(routine.id)}
+                                          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          onClick={cancelEditRoutine}
+                                          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                                            darkMode
+                                              ? "bg-slate-700 text-slate-100 hover:bg-slate-600"
+                                              : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                          }`}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <p className={`font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
+                                            {routine.title}
+                                          </p>
+                                          <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                            {routine.time} • <PriorityBadge priority={routine.priority} darkMode={darkMode} />
+                                            {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
+                                          </p>
+                                          {expandedRoutineIds.includes(routine.id) && routine.description && (
+                                            <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                              {routine.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div className="flex gap-1 shrink-0">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleRoutineActive(routine.id, routine.isActive);
+                                            }}
+                                            className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                              routine.isActive
+                                                ? "bg-emerald-100/60 text-emerald-700"
+                                                : "bg-amber-100/60 text-amber-700"
+                                            }`}
+                                          >
+                                            {routine.isActive ? "Active" : "Inactive"}
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              startEditRoutine(routine);
+                                            }}
+                                            className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                              darkMode ? "bg-slate-700 text-slate-100 hover:bg-slate-600" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                            }`}
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              requestRoutineDelete(routine.id);
+                                            }}
+                                            className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition hover:scale-105 active:scale-95"
+                                          >
+                                            Delete
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                           </div>
@@ -3186,50 +3581,153 @@ function PageContent() {
                                 .map(routine => (
                                   <div 
                                     key={routine.id}
+                                    onClick={() => toggleRoutineExpanded(routine.id)}
                                     className={`rounded-lg border p-3 backdrop-blur-sm transition ${
                                       darkMode
                                         ? "bg-slate-900/40 border-slate-700"
                                         : "bg-white/50 border-slate-200/50"
-                                    } ${!routine.isActive ? "opacity-50" : ""}`}
+                                    } ${!routine.isActive ? "opacity-50" : ""} cursor-pointer`}
                                   >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 min-w-0">
-                                        <p className={`font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
-                                          {routine.title}
-                                        </p>
-                                        <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                                          {routine.time} • <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                            routine.priority === "HIGH" ? (darkMode ? "bg-red-500/25 text-red-200" : "bg-red-100 text-red-700") :
-                                            routine.priority === "LOW" ? (darkMode ? "bg-emerald-500/25 text-emerald-200" : "bg-emerald-100 text-emerald-700") :
-                                            darkMode ? "bg-amber-500/25 text-amber-200" : "bg-amber-100 text-amber-700"
-                                          }`}>{routine.priority}</span>
-                                          {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
-                                        </p>
-                                        {routine.description && (
-                                          <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                                            {routine.description}
-                                          </p>
-                                        )}
-                                      </div>
-                                      <div className="flex gap-1 shrink-0">
-                                        <button
-                                          onClick={() => toggleRoutineActive(routine.id, routine.isActive)}
-                                          className={`rounded px-2 py-1 text-xs font-semibold ${
-                                            routine.isActive
-                                              ? "bg-emerald-100/60 text-emerald-700"
-                                              : "bg-amber-100/60 text-amber-700"
+                                    {editingRoutineId === routine.id ? (
+                                      <div className="space-y-3">
+                                        <input
+                                          value={editRoutineTitle}
+                                          onChange={(e) => setEditRoutineTitle(e.target.value)}
+                                          placeholder="Routine title"
+                                          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
+                                            darkMode
+                                              ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                              : "border-slate-200 bg-white/70 text-slate-900"
                                           }`}
-                                        >
-                                          {routine.isActive ? "Active" : "Inactive"}
-                                        </button>
-                                        <button
-                                          onClick={() => deleteRoutine(routine.id)}
-                                          className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                                        >
-                                          Delete
-                                        </button>
+                                        />
+                                        <textarea
+                                          value={editRoutineDescription}
+                                          onChange={(e) => setEditRoutineDescription(e.target.value)}
+                                          placeholder="Description (optional)"
+                                          rows={2}
+                                          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none resize-none ${
+                                            darkMode
+                                              ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                              : "border-slate-200 bg-white/70 text-slate-900"
+                                          }`}
+                                        />
+                                        <div className="grid gap-2 sm:grid-cols-[1fr_100px_120px]">
+                                          <select
+                                            value={editRoutineDayOfWeek}
+                                            onChange={(e) => setEditRoutineDayOfWeek(Number(e.target.value))}
+                                            className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                              darkMode
+                                                ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                                : "border-slate-200 bg-white/70 text-slate-900"
+                                            }`}
+                                          >
+                                            <option value={7}>Daily</option>
+                                            <option value={0}>Sunday</option>
+                                            <option value={1}>Monday</option>
+                                            <option value={2}>Tuesday</option>
+                                            <option value={3}>Wednesday</option>
+                                            <option value={4}>Thursday</option>
+                                            <option value={5}>Friday</option>
+                                            <option value={6}>Saturday</option>
+                                          </select>
+                                          <input
+                                            type="time"
+                                            value={editRoutineTime}
+                                            onChange={(e) => setEditRoutineTime(e.target.value)}
+                                            className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                              darkMode
+                                                ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                                : "border-slate-200 bg-white/70 text-slate-900"
+                                            }`}
+                                          />
+                                          <select
+                                            value={editRoutinePriority}
+                                            onChange={(e) => setEditRoutinePriority(e.target.value as TaskPriority)}
+                                            className={`rounded-lg border px-3 py-2 text-sm outline-none ${
+                                              darkMode
+                                                ? "border-slate-700 bg-slate-900/50 text-slate-100"
+                                                : "border-slate-200 bg-white/70 text-slate-900"
+                                            }`}
+                                          >
+                                            <option>LOW</option>
+                                            <option>MEDIUM</option>
+                                            <option>HIGH</option>
+                                          </select>
+                                        </div>
+                                        <div className="flex gap-2">
+                                          <button
+                                            onClick={() => saveRoutineEdit(routine.id)}
+                                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            onClick={cancelEditRoutine}
+                                            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                                              darkMode
+                                                ? "bg-slate-700 text-slate-100 hover:bg-slate-600"
+                                                : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                            }`}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
                                       </div>
-                                    </div>
+                                    ) : (
+                                      <>
+                                        <div className="flex items-start justify-between gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <p className={`font-semibold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
+                                              {routine.title}
+                                            </p>
+                                            <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                              {routine.time} • <PriorityBadge priority={routine.priority} darkMode={darkMode} />
+                                              {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
+                                            </p>
+                                            {expandedRoutineIds.includes(routine.id) && routine.description && (
+                                              <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                                {routine.description}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <div className="flex gap-1 shrink-0">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleRoutineActive(routine.id, routine.isActive);
+                                              }}
+                                              className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                                routine.isActive
+                                                  ? "bg-emerald-100/60 text-emerald-700"
+                                                  : "bg-amber-100/60 text-amber-700"
+                                              }`}
+                                            >
+                                              {routine.isActive ? "Active" : "Inactive"}
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                startEditRoutine(routine);
+                                              }}
+                                              className={`rounded px-2 py-1 text-xs font-semibold transition hover:scale-105 active:scale-95 ${
+                                                darkMode ? "bg-slate-700 text-slate-100 hover:bg-slate-600" : "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                                              }`}
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                requestRoutineDelete(routine.id);
+                                              }}
+                                              className="rounded bg-red-100/60 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition hover:scale-105 active:scale-95"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </>
+                                    )}
                                   </div>
                                 ))}
                             </div>
@@ -3247,6 +3745,7 @@ function PageContent() {
                           <span className="text-xs">Create your first habit above to get started.</span>
                         </p>
                       )}
+
                     </div>
                   )}
                 </section>
@@ -3455,7 +3954,7 @@ function PageContent() {
                   >
                     {profileLoading ? "Saving..." : "Save Profile"}
                   </button>
-                  {profileMessage && <p className={`text-sm ${profileMessage.includes("updated") ? "text-emerald-600" : "text-red-600"}`}>{profileMessage}</p>}
+                  {profileMessage && <AlertMessage message={profileMessage} />}
                 </div>
               </section>
 
@@ -3498,7 +3997,7 @@ function PageContent() {
                   >
                     {emailLoading ? "Updating..." : "Change Email"}
                   </button>
-                  {emailMessage && <p className={`text-sm ${emailMessage.includes("updated") ? "text-emerald-600" : "text-red-600"}`}>{emailMessage}</p>}
+                  {emailMessage && <AlertMessage message={emailMessage} />}
                 </div>
               </section>
 
@@ -3541,7 +4040,7 @@ function PageContent() {
                   >
                     {passwordLoading ? "Updating..." : "Change Password"}
                   </button>
-                  {passwordMessage && <p className={`text-sm ${passwordMessage.includes("updated") ? "text-emerald-600" : "text-red-600"}`}>{passwordMessage}</p>}
+                  {passwordMessage && <AlertMessage message={passwordMessage} />}
                 </div>
               </section>
 
@@ -3572,13 +4071,13 @@ function PageContent() {
                     />
                   </div>
                   <button
-                    onClick={() => void deleteAccount(clearCachedAccountSession, "/")}
-                    disabled={deleteLoading}
+                    onClick={openDeleteAccountDialog}
+                    disabled={deleteLoading || deleteAccountBusy}
                     className="w-full bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50"
                   >
-                    {deleteLoading ? "Deleting..." : "🗑️ Delete Account Permanently"}
+                    {deleteLoading || deleteAccountBusy ? "Deleting..." : "🗑️ Delete Account Permanently"}
                   </button>
-                  {deleteMessage && <p className={`text-sm ${deleteMessage.includes("deleted") ? "text-emerald-600" : "text-red-600"}`}>{deleteMessage}</p>}
+                  {deleteMessage && <AlertMessage message={deleteMessage} successKeyword="deleted" />}
                 </div>
               </section>
             </div>
@@ -3592,41 +4091,36 @@ function PageContent() {
         </div>
       </div>
       </div>
-      {deleteTaskDialogOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/60 p-4" style={{ zIndex: 9999 }}>
-          <div
-            className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${
-              darkMode ? "border-white/20 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"
-            }`}
-            style={{ zIndex: 10000 }}
-          >
-            <h3 className="text-lg font-bold">Delete task?</h3>
-            <p className={`mt-2 text-sm ${darkMode ? "text-slate-300" : "text-slate-600"}`}>
-              This action cannot be undone.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                onClick={closeDeleteTaskDialog}
-                disabled={deleteTaskBusy}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  darkMode
-                    ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-50"
-                    : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteTask}
-                disabled={deleteTaskBusy}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
-              >
-                {deleteTaskBusy ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={deleteTaskDialogOpen}
+        title="Delete task?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        busy={deleteTaskBusy}
+        darkMode={darkMode}
+        onCancel={closeDeleteTaskDialog}
+        onConfirm={confirmDeleteTask}
+      />
+      <ConfirmDialog
+        open={deleteRoutineDialogOpen}
+        title="Delete routine?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        busy={deleteRoutineBusy}
+        darkMode={darkMode}
+        onCancel={closeDeleteRoutineDialog}
+        onConfirm={confirmDeleteRoutine}
+      />
+      <ConfirmDialog
+        open={deleteAccountDialogOpen}
+        title="Delete account?"
+        message="This action cannot be undone and will permanently remove your account data."
+        confirmLabel="Delete"
+        busy={deleteAccountBusy || deleteLoading}
+        darkMode={darkMode}
+        onCancel={closeDeleteAccountDialog}
+        onConfirm={confirmDeleteAccount}
+      />
       {/* Footer */}
       <footer className={`shrink-0 border-t py-4 ${darkMode ? "border-white/10" : "border-slate-200"}`}>
         <div className={`mx-auto w-full max-w-7xl px-4 md:px-8 grid gap-2 text-sm items-center text-center sm:grid-cols-3 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>

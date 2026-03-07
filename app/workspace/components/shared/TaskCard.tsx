@@ -11,6 +11,39 @@ interface TaskCardProps {
   onDelete: () => void;
 }
 
+const priorityConfig = {
+  HIGH: {
+    icon: '🔴',
+    label: 'High',
+    bgDark: 'bg-red-500/20',
+    bgLight: 'bg-red-50',
+    textDark: 'text-red-400',
+    textLight: 'text-red-700',
+    borderDark: 'border-red-500/30',
+    borderLight: 'border-red-200',
+  },
+  MEDIUM: {
+    icon: '🟡',
+    label: 'Medium',
+    bgDark: 'bg-amber-500/20',
+    bgLight: 'bg-amber-50',
+    textDark: 'text-amber-400',
+    textLight: 'text-amber-700',
+    borderDark: 'border-amber-500/30',
+    borderLight: 'border-amber-200',
+  },
+  LOW: {
+    icon: '🟢',
+    label: 'Low',
+    bgDark: 'bg-green-500/20',
+    bgLight: 'bg-green-50',
+    textDark: 'text-green-400',
+    textLight: 'text-green-700',
+    borderDark: 'border-green-500/30',
+    borderLight: 'border-green-200',
+  },
+};
+
 export function TaskCard({
   task,
   darkMode,
@@ -19,75 +52,101 @@ export function TaskCard({
   onToggleComplete,
   onDelete,
 }: TaskCardProps) {
-  const priorityColors = {
-    HIGH: darkMode ? 'text-red-400' : 'text-red-600',
-    MEDIUM: darkMode ? 'text-amber-400' : 'text-amber-600',
-    LOW: darkMode ? 'text-green-400' : 'text-green-600',
-  };
+  const priority = priorityConfig[task.priority];
 
   return (
     <div
       onClick={onToggleExpand}
-      className={`group cursor-pointer rounded-xl border-2 px-4 py-3 transition-all duration-200 ${
+      className={`group relative cursor-pointer rounded-xl border backdrop-blur-sm px-4 py-3 transition-all duration-300 hover:scale-[1.02] ${
         darkMode
-          ? `border-slate-700 bg-slate-900/50 hover:bg-slate-800/50`
-          : `border-slate-200 bg-white/70 hover:bg-white/90`
+          ? `border-slate-700/50 bg-slate-800/60 hover:bg-slate-800/80 hover:border-slate-600 shadow-lg shadow-slate-950/20`
+          : `border-slate-200 bg-white/80 shadow-md hover:shadow-lg hover:border-slate-300`
       }`}
     >
-      <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={task.completed}
-          onChange={(e) => {
-            e.stopPropagation();
-            onToggleComplete(e.target.checked);
-          }}
-          className={`mt-1 h-5 w-5 rounded accent-blue-500 ${
-            task.completed ? 'opacity-50' : 'opacity-100'
-          }`}
-        />
+      {/* Subtle glow effect on hover */}
+      <div className={`absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
+        darkMode ? 'bg-gradient-to-br from-blue-500/5 to-purple-500/5' : 'bg-gradient-to-br from-blue-500/5 to-purple-500/5'
+      }`} />
+      
+      <div className="relative flex items-start gap-3">
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            checked={task.completed}
+            onChange={(e) => {
+              e.stopPropagation();
+              onToggleComplete(e.target.checked);
+            }}
+            className={`h-5 w-5 rounded-lg cursor-pointer accent-blue-500 transition-all duration-200 hover:scale-110 ${
+              task.completed ? 'opacity-60' : 'opacity-100'
+            }`}
+          />
+        </div>
+        
         <div className="flex-1 min-w-0">
           <p
-            className={`font-medium transition-all duration-200 ${
+            className={`text-base font-semibold transition-all duration-200 ${
               task.completed
                 ? darkMode
                   ? 'line-through text-slate-500'
                   : 'line-through text-slate-400'
                 : darkMode
-                  ? 'text-slate-100'
+                  ? 'text-slate-50'
                   : 'text-slate-900'
             }`}
           >
             {task.title}
           </p>
+          
           {isExpanded && task.description && (
-            <p className={`mt-2 text-sm ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p className={`mt-2 text-xs leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
               {task.description}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2 text-sm">
-            <span className={priorityColors[task.priority]}>{task.priority}</span>
-            <span className={darkMode ? 'text-slate-500' : 'text-slate-500'}>
-              {task.dueDate}
+          
+          <div className="mt-2 flex items-center gap-1.5 text-xs flex-wrap">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-medium ${
+              darkMode 
+                ? `${priority.bgDark} ${priority.textDark} ${priority.borderDark}` 
+                : `${priority.bgLight} ${priority.textLight} ${priority.borderLight}`
+            }`}>
+              <span className="text-sm">{priority.icon}</span>
+              {priority.label}
             </span>
-            <span className={darkMode ? 'text-slate-500' : 'text-slate-500'}>
-              {task.dueTime}
+            
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+              darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-slate-100 text-slate-700'
+            }`}>
+              <span>📅</span>
+              {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
+            
+            {task.dueTime && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
+                darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-slate-100 text-slate-700'
+              }`}>
+                <span>⏰</span>
+                {task.dueTime}
+              </span>
+            )}
           </div>
         </div>
+        
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          className={`rounded-lg p-2 opacity-0 transition-all duration-200 group-hover:opacity-100 ${
+          className={`rounded-lg p-2 opacity-0 transition-all duration-300 group-hover:opacity-100 hover:scale-110 active:scale-95 ${
             darkMode
-              ? 'hover:bg-red-900/30 text-red-400'
-              : 'hover:bg-red-100 text-red-600'
+              ? 'hover:bg-red-500/20 text-red-400 border border-red-500/30'
+              : 'hover:bg-red-50 text-red-600 border border-red-200'
           }`}
           title="Delete task"
         >
-          🗑️
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
         </button>
       </div>
     </div>
