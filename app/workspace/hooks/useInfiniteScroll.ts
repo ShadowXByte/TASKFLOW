@@ -9,7 +9,7 @@ interface UseInfiniteScrollProps {
 }
 
 export function useInfiniteScroll({ onLoadMore, enabled = true, threshold = 0.1 }: UseInfiniteScrollProps) {
-  const observerTarget = useRef<HTMLElement | null>(null);
+  const observerTarget = useRef<HTMLLIElement | null>(null);
 
   useEffect(() => {
     if (!enabled || !observerTarget.current) return;
