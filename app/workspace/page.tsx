@@ -53,6 +53,7 @@ import { useAnalytics } from "./hooks/useAnalytics";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 import { useProfileManagement } from "./hooks/useProfileManagement";
 import { useTaskFiltering } from "./hooks/useTaskFiltering";
+import { useInfiniteScroll } from "./hooks/useInfiniteScroll";
 import {
   WEEKDAYS,
   GUEST_TASKS_KEY,
@@ -129,6 +130,8 @@ function PageContent() {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [search, setSearch] = useState("");
   const [allTasksDateFilter, setAllTasksDateFilter] = useState("");
+  const [allTasksDisplayCount, setAllTasksDisplayCount] = useState(20);
+  const [allTasksSortNewest, setAllTasksSortNewest] = useState(true);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -1059,6 +1062,20 @@ function PageContent() {
         .sort((a, b) => (a.dueDate === b.dueDate ? a.dueTime.localeCompare(b.dueTime) : a.dueDate.localeCompare(b.dueDate))),
     [filteredTasks],
   );
+
+  const displayedAllTasks = useMemo(() => {
+    const ordered = allTasksSortNewest ? sortedTasks.slice().reverse() : sortedTasks;
+    return ordered.slice(0, allTasksDisplayCount);
+  }, [sortedTasks, allTasksSortNewest, allTasksDisplayCount]);
+
+  const allTasksObserverTarget = useInfiniteScroll({
+    onLoadMore: () => setAllTasksDisplayCount((prev) => prev + 20),
+    enabled: allTasksDisplayCount < sortedTasks.length,
+  });
+
+  useEffect(() => {
+    setAllTasksDisplayCount(20);
+  }, [filter, search, allTasksDateFilter]);
 
   const {
     analytics,
@@ -2882,7 +2899,7 @@ function PageContent() {
               <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
                 darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
               }`}>
-                <div className="grid gap-3 md:grid-cols-[180px_1fr_170px_auto]">
+                <div className="grid gap-3 md:grid-cols-[120px_1fr_160px_52px_auto]">
                   <select
                     value={filter}
                     onChange={(event) => setFilter(event.target.value as TaskFilter)}
@@ -2923,6 +2940,17 @@ function PageContent() {
                     }}
                   />
                   <button
+                    onClick={() => setAllTasksSortNewest((prev) => !prev)}
+                    title={allTasksSortNewest ? "Newest first" : "Oldest first"}
+                    className={`rounded-xl border px-2 py-2 text-lg font-medium transition hover:scale-105 active:scale-95 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-900/40 text-slate-200 hover:bg-slate-800"
+                        : "border-slate-200 bg-white/70 text-slate-700 hover:bg-white"
+                    }`}
+                  >
+                    {allTasksSortNewest ? "↑" : "↓"}
+                  </button>
+                  <button
                     onClick={() => setAllTasksDateFilter("")}
                     className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
                       darkMode
@@ -2951,7 +2979,8 @@ function PageContent() {
                       No tasks here yet. Add one above!
                     </li>
                   ) : (
-                    sortedTasks.map((task) => {
+                    <>
+                      {displayedAllTasks.map((task) => {
                       const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
                       const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
 
@@ -3110,7 +3139,13 @@ function PageContent() {
                         )}
                       </li>
                       );
-                    })
+                      })}
+                      {allTasksDisplayCount < sortedTasks.length && (
+                        <li ref={allTasksObserverTarget} className={`py-3 text-center text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          Loading more tasks...
+                        </li>
+                      )}
+                    </>
                   )}
                 </ul>
               </section>
