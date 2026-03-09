@@ -53,6 +53,7 @@ import { useAnalytics } from "./hooks/useAnalytics";
 import { usePushNotifications } from "./hooks/usePushNotifications";
 import { useProfileManagement } from "./hooks/useProfileManagement";
 import { useTaskFiltering } from "./hooks/useTaskFiltering";
+import { useInfiniteScroll } from "./hooks/useInfiniteScroll";
 import {
   WEEKDAYS,
   GUEST_TASKS_KEY,
@@ -129,6 +130,8 @@ function PageContent() {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [search, setSearch] = useState("");
   const [allTasksDateFilter, setAllTasksDateFilter] = useState("");
+  const [allTasksDisplayCount, setAllTasksDisplayCount] = useState(20);
+  const [allTasksSortNewest, setAllTasksSortNewest] = useState(true);
   const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -991,25 +994,44 @@ function PageContent() {
     });
   }, [monthCursor]);
 
-  // Count tasks per date for calendar dots
-  const dueCountByDate = useMemo(() => {
-    const map = new Map<string, number>();
-    // Count regular tasks
-    for (const task of tasks) {
-      map.set(task.dueDate, (map.get(task.dueDate) || 0) + 1);
-    }
-    // Count routine-generated tasks for each date in the calendar
-    if (routines.length > 0) {
-      for (const cell of calendarCells) {
-        const dateStr = toDateInputValue(cell);
-        const routineTasks = generateRoutineTasksForDate(dateStr, routines);
-        if (routineTasks.length > 0) {
-          map.set(dateStr, (map.get(dateStr) || 0) + routineTasks.length);
+  // Build per-day task status for calendar markers (pending vs completed)
+  const calendarDayStatus = useMemo(() => {
+    const map = new Map<string, { total: number; completed: number }>();
+
+    for (const cell of calendarCells) {
+      const dateStr = toDateInputValue(cell);
+      const regularTasks = tasks.filter((task) => task.dueDate === dateStr);
+      const regularCompleted = regularTasks.filter((task) => task.completed).length;
+
+      const existingRoutineIds = new Set(
+        regularTasks
+          .filter((task) => typeof task.routineId === "number" && task.routineId !== null)
+          .map((task) => task.routineId as number),
+      );
+
+      const generatedRoutineTasks = generateRoutineTasksForDate(dateStr, routines).filter(
+        (task) => !(typeof task.routineId === "number" && existingRoutineIds.has(task.routineId)),
+      );
+
+      const generatedCompleted = generatedRoutineTasks.filter((task) => {
+        if (typeof task.routineId !== "number") {
+          return false;
         }
+
+        const completionKey = getRoutineCompletionKey(task.routineId, dateStr);
+        return completedRoutineKeys.includes(completionKey);
+      }).length;
+
+      const total = regularTasks.length + generatedRoutineTasks.length;
+      const completed = regularCompleted + generatedCompleted;
+
+      if (total > 0) {
+        map.set(dateStr, { total, completed });
       }
     }
+
     return map;
-  }, [tasks, routines, calendarCells]);
+  }, [tasks, routines, calendarCells, completedRoutineKeys]);
 
   const tasksForSelectedDay = useMemo(
     () => {
@@ -1059,6 +1081,20 @@ function PageContent() {
         .sort((a, b) => (a.dueDate === b.dueDate ? a.dueTime.localeCompare(b.dueTime) : a.dueDate.localeCompare(b.dueDate))),
     [filteredTasks],
   );
+
+  const displayedAllTasks = useMemo(() => {
+    const ordered = allTasksSortNewest ? sortedTasks.slice().reverse() : sortedTasks;
+    return ordered.slice(0, allTasksDisplayCount);
+  }, [sortedTasks, allTasksSortNewest, allTasksDisplayCount]);
+
+  const allTasksObserverTarget = useInfiniteScroll({
+    onLoadMore: () => setAllTasksDisplayCount((prev) => prev + 20),
+    enabled: allTasksDisplayCount < sortedTasks.length,
+  });
+
+  useEffect(() => {
+    setAllTasksDisplayCount(20);
+  }, [filter, search, allTasksDateFilter]);
 
   const {
     analytics,
@@ -2645,7 +2681,8 @@ function PageContent() {
                         const dayKey = toDateInputValue(day);
                         const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
                         const isSelected = selectedDate === dayKey;
-                        const dueCount = dueCountByDate.get(dayKey) || 0;
+                        const dayStatus = calendarDayStatus.get(dayKey);
+                        const isFullyCompletedDay = dayStatus && dayStatus.total > 0 && dayStatus.completed === dayStatus.total;
                         return (
                           <button
                             key={dayKey}
@@ -2656,7 +2693,12 @@ function PageContent() {
                                 : darkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white/50 hover:bg-white/80"
                             } ${!isCurrentMonth ? "opacity-30" : ""}`}
                           >
-                            {day.getDate()}{dueCount > 0 && <div className="text-[8px]">◆</div>}
+                            {day.getDate()}
+                            {dayStatus && dayStatus.total > 0 && (
+                              <div className={`text-[10px] ${isFullyCompletedDay ? "text-emerald-500" : "text-amber-500"}`}>
+                                {isFullyCompletedDay ? "✓" : "•"}
+                              </div>
+                            )}
                           </button>
                         );
                       })}
@@ -2882,7 +2924,7 @@ function PageContent() {
               <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
                 darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
               }`}>
-                <div className="grid gap-3 md:grid-cols-[180px_1fr_170px_auto]">
+                <div className="grid gap-3 md:grid-cols-[120px_1fr_160px_52px_auto]">
                   <select
                     value={filter}
                     onChange={(event) => setFilter(event.target.value as TaskFilter)}
@@ -2923,6 +2965,17 @@ function PageContent() {
                     }}
                   />
                   <button
+                    onClick={() => setAllTasksSortNewest((prev) => !prev)}
+                    title={allTasksSortNewest ? "Newest first" : "Oldest first"}
+                    className={`rounded-xl border px-2 py-2 text-lg font-medium transition hover:scale-105 active:scale-95 ${
+                      darkMode
+                        ? "border-slate-700 bg-slate-900/40 text-slate-200 hover:bg-slate-800"
+                        : "border-slate-200 bg-white/70 text-slate-700 hover:bg-white"
+                    }`}
+                  >
+                    {allTasksSortNewest ? "↑" : "↓"}
+                  </button>
+                  <button
                     onClick={() => setAllTasksDateFilter("")}
                     className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
                       darkMode
@@ -2951,7 +3004,8 @@ function PageContent() {
                       No tasks here yet. Add one above!
                     </li>
                   ) : (
-                    sortedTasks.map((task) => {
+                    <>
+                      {displayedAllTasks.map((task) => {
                       const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
                       const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
 
@@ -3110,7 +3164,13 @@ function PageContent() {
                         )}
                       </li>
                       );
-                    })
+                      })}
+                      {allTasksDisplayCount < sortedTasks.length && (
+                        <li ref={allTasksObserverTarget} className={`py-3 text-center text-sm ${darkMode ? "text-slate-400" : "text-slate-500"}`}>
+                          Loading more tasks...
+                        </li>
+                      )}
+                    </>
                   )}
                 </ul>
               </section>
