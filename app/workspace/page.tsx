@@ -2749,7 +2749,7 @@ function PageContent() {
                                       darkMode
                                         ? "border-slate-700 bg-slate-900/70 text-slate-300"
                                         : "border-slate-200 bg-white/80 text-slate-700"
-                                    }`}>
+                                    } whitespace-pre-line break-words`}>
                                       {task.description}
                                     </div>
                                   )}
@@ -3057,7 +3057,7 @@ function PageContent() {
                                   darkMode
                                     ? "border-slate-700 bg-slate-900/50 text-slate-300"
                                     : "border-slate-200 bg-white/70 text-slate-700"
-                                }`}>
+                                } whitespace-pre-line break-words`}>
                                   {task.description}
                                 </div>
                               )}
@@ -3508,7 +3508,7 @@ function PageContent() {
                                             {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
                                           </p>
                                           {expandedRoutineIds.includes(routine.id) && routine.description && (
-                                            <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                            <p className={`text-xs mt-1 whitespace-pre-line break-words ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
                                               {routine.description}
                                             </p>
                                           )}
@@ -3685,7 +3685,7 @@ function PageContent() {
                                               {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
                                             </p>
                                             {expandedRoutineIds.includes(routine.id) && routine.description && (
-                                              <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                              <p className={`text-xs mt-1 whitespace-pre-line break-words ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
                                                 {routine.description}
                                               </p>
                                             )}
