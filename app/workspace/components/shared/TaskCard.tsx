@@ -53,6 +53,8 @@ export function TaskCard({
   onDelete,
 }: TaskCardProps) {
   const priority = priorityConfig[task.priority];
+  const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}`).getTime();
+  const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
 
   return (
     <div
@@ -99,7 +101,7 @@ export function TaskCard({
           </p>
           
           {isExpanded && task.description && (
-            <p className={`mt-2 text-xs leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p className={`mt-2 text-xs leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300 whitespace-pre-line break-words ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
               {task.description}
             </p>
           )}
@@ -113,6 +115,17 @@ export function TaskCard({
               <span className="text-sm">{priority.icon}</span>
               {priority.label}
             </span>
+
+            {isOverdue && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-medium ${
+                darkMode
+                  ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                  : 'bg-red-100 text-red-700 border-red-200'
+              }`}>
+                <span>⚠️</span>
+                Overdue
+              </span>
+            )}
             
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
               darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-slate-100 text-slate-700'

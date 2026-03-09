@@ -1516,6 +1516,7 @@ function PageContent() {
         time: routineTime,
         priority: routinePriority,
         isActive: true,
+        createdAt: new Date().toISOString(),
       };
       const updated = [...routines, newRoutine];
       setRoutines(updated);
@@ -1540,6 +1541,7 @@ function PageContent() {
           time: routineTime,
           priority: routinePriority,
           isActive: true,
+          createdAt: new Date().toISOString(),
         };
         const updated = [...routines, newRoutine];
         setRoutines(updated);
@@ -2698,6 +2700,8 @@ function PageContent() {
                             LOW: { icon: '🟢', color: darkMode ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' }
                           };
                           const priority = priorityConfig[task.priority];
+                          const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
+                          const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
                           
                           return (
                             <li
@@ -2742,6 +2746,13 @@ function PageContent() {
                                         🔁 Routine
                                       </span>
                                     )}
+                                    {isOverdue && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+                                        darkMode ? "bg-red-500/20 text-red-300 border-red-500/40" : "bg-red-100 text-red-700 border-red-200"
+                                      }`}>
+                                        ⚠️ Overdue
+                                      </span>
+                                    )}
                                   </div>
                                   
                                   {expandedTaskIds.includes(task.id) && task.description && (
@@ -2749,7 +2760,7 @@ function PageContent() {
                                       darkMode
                                         ? "border-slate-700 bg-slate-900/70 text-slate-300"
                                         : "border-slate-200 bg-white/80 text-slate-700"
-                                    }`}>
+                                    } whitespace-pre-line break-words`}>
                                       {task.description}
                                     </div>
                                   )}
@@ -2940,7 +2951,11 @@ function PageContent() {
                       No tasks here yet. Add one above!
                     </li>
                   ) : (
-                    sortedTasks.map((task) => (
+                    sortedTasks.map((task) => {
+                      const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
+                      const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
+
+                      return (
                       <li
                         key={task.id}
                         className={`rounded-lg border p-3 backdrop-blur-sm transition ${
@@ -3051,13 +3066,16 @@ function PageContent() {
                                 {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
                                   darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
                                 }`}>🔁 Routine</span>}
+                                {isOverdue && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                  darkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700"
+                                }`}>⚠️ Overdue</span>}
                               </p>
                               {expandedTaskIds.includes(task.id) && task.description && (
                                 <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
                                   darkMode
                                     ? "border-slate-700 bg-slate-900/50 text-slate-300"
                                     : "border-slate-200 bg-white/70 text-slate-700"
-                                }`}>
+                                } whitespace-pre-line break-words`}>
                                   {task.description}
                                 </div>
                               )}
@@ -3091,7 +3109,8 @@ function PageContent() {
                           </div>
                         )}
                       </li>
-                    ))
+                      );
+                    })
                   )}
                 </ul>
               </section>
@@ -3508,7 +3527,7 @@ function PageContent() {
                                             {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
                                           </p>
                                           {expandedRoutineIds.includes(routine.id) && routine.description && (
-                                            <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                            <p className={`text-xs mt-1 whitespace-pre-line break-words ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
                                               {routine.description}
                                             </p>
                                           )}
@@ -3685,7 +3704,7 @@ function PageContent() {
                                               {!routine.isActive && <span className="ml-2 text-xs">(Inactive)</span>}
                                             </p>
                                             {expandedRoutineIds.includes(routine.id) && routine.description && (
-                                              <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                                              <p className={`text-xs mt-1 whitespace-pre-line break-words ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
                                                 {routine.description}
                                               </p>
                                             )}

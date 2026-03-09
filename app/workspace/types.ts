@@ -17,6 +17,8 @@ export type Routine = {
   time: string;
   priority: TaskPriority;
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
