@@ -696,8 +696,11 @@ function PageContent() {
       }
 
       // Online in account mode: need authentication
+      // Only clear tasks if there's no cached session at all (true logout, not just loading state)
       if (status !== "authenticated") {
-        setTasks([]);
+        if (!hasOfflineAccountReady && !hasCachedAccountSession) {
+          setTasks([]);
+        }
         return;
       }
 
@@ -729,19 +732,31 @@ function PageContent() {
   ]);
 
   useEffect(() => {
-    if (workspaceMode !== "account" || (status !== "authenticated" && !offlineAccountMode && !hasCachedAccountSession)) {
+    if (workspaceMode !== "account") {
       return;
     }
 
-    writeAccountCachedTasks(tasks);
+    // Always write to cache when authenticated OR when we have offline account access
+    const hasOfflineAccountReady = safeStorageGetItem(OFFLINE_ACCOUNT_READY_KEY) === "1";
+    const shouldWriteCache = status === "authenticated" || offlineAccountMode || hasCachedAccountSession || hasOfflineAccountReady;
+
+    if (shouldWriteCache) {
+      writeAccountCachedTasks(tasks);
+    }
   }, [workspaceMode, status, offlineAccountMode, hasCachedAccountSession, tasks, writeAccountCachedTasks]);
 
   useEffect(() => {
-    if (workspaceMode !== "account" || (status !== "authenticated" && !offlineAccountMode && !hasCachedAccountSession)) {
+    if (workspaceMode !== "account") {
       return;
     }
 
-    writeAccountCachedRoutines(routines);
+    // Always write to cache when authenticated OR when we have offline account access
+    const hasOfflineAccountReady = safeStorageGetItem(OFFLINE_ACCOUNT_READY_KEY) === "1";
+    const shouldWriteCache = status === "authenticated" || offlineAccountMode || hasCachedAccountSession || hasOfflineAccountReady;
+
+    if (shouldWriteCache) {
+      writeAccountCachedRoutines(routines);
+    }
   }, [workspaceMode, status, offlineAccountMode, hasCachedAccountSession, routines, writeAccountCachedRoutines]);
 
   useEffect(() => {
