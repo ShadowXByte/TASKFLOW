@@ -994,25 +994,44 @@ function PageContent() {
     });
   }, [monthCursor]);
 
-  // Count tasks per date for calendar dots
-  const dueCountByDate = useMemo(() => {
-    const map = new Map<string, number>();
-    // Count regular tasks
-    for (const task of tasks) {
-      map.set(task.dueDate, (map.get(task.dueDate) || 0) + 1);
-    }
-    // Count routine-generated tasks for each date in the calendar
-    if (routines.length > 0) {
-      for (const cell of calendarCells) {
-        const dateStr = toDateInputValue(cell);
-        const routineTasks = generateRoutineTasksForDate(dateStr, routines);
-        if (routineTasks.length > 0) {
-          map.set(dateStr, (map.get(dateStr) || 0) + routineTasks.length);
+  // Build per-day task status for calendar markers (pending vs completed)
+  const calendarDayStatus = useMemo(() => {
+    const map = new Map<string, { total: number; completed: number }>();
+
+    for (const cell of calendarCells) {
+      const dateStr = toDateInputValue(cell);
+      const regularTasks = tasks.filter((task) => task.dueDate === dateStr);
+      const regularCompleted = regularTasks.filter((task) => task.completed).length;
+
+      const existingRoutineIds = new Set(
+        regularTasks
+          .filter((task) => typeof task.routineId === "number" && task.routineId !== null)
+          .map((task) => task.routineId as number),
+      );
+
+      const generatedRoutineTasks = generateRoutineTasksForDate(dateStr, routines).filter(
+        (task) => !(typeof task.routineId === "number" && existingRoutineIds.has(task.routineId)),
+      );
+
+      const generatedCompleted = generatedRoutineTasks.filter((task) => {
+        if (typeof task.routineId !== "number") {
+          return false;
         }
+
+        const completionKey = getRoutineCompletionKey(task.routineId, dateStr);
+        return completedRoutineKeys.includes(completionKey);
+      }).length;
+
+      const total = regularTasks.length + generatedRoutineTasks.length;
+      const completed = regularCompleted + generatedCompleted;
+
+      if (total > 0) {
+        map.set(dateStr, { total, completed });
       }
     }
+
     return map;
-  }, [tasks, routines, calendarCells]);
+  }, [tasks, routines, calendarCells, completedRoutineKeys]);
 
   const tasksForSelectedDay = useMemo(
     () => {
@@ -2662,7 +2681,8 @@ function PageContent() {
                         const dayKey = toDateInputValue(day);
                         const isCurrentMonth = day.getMonth() === monthCursor.getMonth();
                         const isSelected = selectedDate === dayKey;
-                        const dueCount = dueCountByDate.get(dayKey) || 0;
+                        const dayStatus = calendarDayStatus.get(dayKey);
+                        const isFullyCompletedDay = dayStatus && dayStatus.total > 0 && dayStatus.completed === dayStatus.total;
                         return (
                           <button
                             key={dayKey}
@@ -2673,7 +2693,12 @@ function PageContent() {
                                 : darkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white/50 hover:bg-white/80"
                             } ${!isCurrentMonth ? "opacity-30" : ""}`}
                           >
-                            {day.getDate()}{dueCount > 0 && <div className="text-[8px]">◆</div>}
+                            {day.getDate()}
+                            {dayStatus && dayStatus.total > 0 && (
+                              <div className={`text-[10px] ${isFullyCompletedDay ? "text-emerald-500" : "text-amber-500"}`}>
+                                {isFullyCompletedDay ? "✓" : "•"}
+                              </div>
+                            )}
                           </button>
                         );
                       })}
