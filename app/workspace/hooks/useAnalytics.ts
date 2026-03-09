@@ -104,14 +104,28 @@ export function useAnalytics({ tasks, routines, completedRoutineKeys, today }: U
   const routineAnalytics = useMemo(() => {
     const activeRoutines = routines.filter((routine) => routine.isActive);
 
+    const getRoutineStartDate = (routine: Routine) => {
+      if (typeof routine.createdAt !== "string" || routine.createdAt.length < 10) {
+        return null;
+      }
+
+      return routine.createdAt.slice(0, 10);
+    };
+
     const countExpectedOccurrences = (startIso: string, endIso: string) => {
       let expected = 0;
       const cursor = new Date(`${startIso}T00:00:00`);
       const end = new Date(`${endIso}T00:00:00`);
 
       while (cursor <= end) {
+        const cursorIso = toDateInputValue(cursor);
         const weekday = cursor.getDay();
         for (const routine of activeRoutines) {
+          const routineStart = getRoutineStartDate(routine);
+          if (routineStart && cursorIso < routineStart) {
+            continue;
+          }
+
           if (routine.dayOfWeek === 7 || routine.dayOfWeek === weekday) {
             expected += 1;
           }

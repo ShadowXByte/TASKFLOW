@@ -1516,6 +1516,7 @@ function PageContent() {
         time: routineTime,
         priority: routinePriority,
         isActive: true,
+        createdAt: new Date().toISOString(),
       };
       const updated = [...routines, newRoutine];
       setRoutines(updated);
@@ -1540,6 +1541,7 @@ function PageContent() {
           time: routineTime,
           priority: routinePriority,
           isActive: true,
+          createdAt: new Date().toISOString(),
         };
         const updated = [...routines, newRoutine];
         setRoutines(updated);
@@ -2698,6 +2700,8 @@ function PageContent() {
                             LOW: { icon: '🟢', color: darkMode ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' }
                           };
                           const priority = priorityConfig[task.priority];
+                          const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
+                          const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
                           
                           return (
                             <li
@@ -2740,6 +2744,13 @@ function PageContent() {
                                         darkMode ? "bg-blue-500/20 text-blue-200 border-blue-500/30" : "bg-blue-50 text-blue-700 border-blue-200"
                                       }`}>
                                         🔁 Routine
+                                      </span>
+                                    )}
+                                    {isOverdue && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+                                        darkMode ? "bg-red-500/20 text-red-300 border-red-500/40" : "bg-red-100 text-red-700 border-red-200"
+                                      }`}>
+                                        ⚠️ Overdue
                                       </span>
                                     )}
                                   </div>
@@ -2940,7 +2951,11 @@ function PageContent() {
                       No tasks here yet. Add one above!
                     </li>
                   ) : (
-                    sortedTasks.map((task) => (
+                    sortedTasks.map((task) => {
+                      const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
+                      const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
+
+                      return (
                       <li
                         key={task.id}
                         className={`rounded-lg border p-3 backdrop-blur-sm transition ${
@@ -3051,6 +3066,9 @@ function PageContent() {
                                 {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
                                   darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
                                 }`}>🔁 Routine</span>}
+                                {isOverdue && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                  darkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700"
+                                }`}>⚠️ Overdue</span>}
                               </p>
                               {expandedTaskIds.includes(task.id) && task.description && (
                                 <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
@@ -3091,7 +3109,8 @@ function PageContent() {
                           </div>
                         )}
                       </li>
-                    ))
+                      );
+                    })
                   )}
                 </ul>
               </section>

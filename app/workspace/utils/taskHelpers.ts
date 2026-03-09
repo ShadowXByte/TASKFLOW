@@ -99,9 +99,29 @@ export const writeGuestRoutines = (routines: Routine[]) => {
 export const generateRoutineTasksForDate = (dateString: string, routines: Routine[]): Task[] => {
   const date = new Date(dateString + "T00:00:00");
   const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc
+
+  const getRoutineStartDate = (routine: Routine) => {
+    if (typeof routine.createdAt !== "string" || routine.createdAt.length < 10) {
+      return null;
+    }
+
+    // Prisma timestamps are ISO strings. Keep YYYY-MM-DD for stable lexical compare.
+    return routine.createdAt.slice(0, 10);
+  };
   
   // Filter routines that match this day or are daily (dayOfWeek === 7)
-  const matchingRoutines = routines.filter(r => r.isActive && (r.dayOfWeek === dayOfWeek || r.dayOfWeek === 7));
+  const matchingRoutines = routines.filter((r) => {
+    if (!r.isActive) {
+      return false;
+    }
+
+    const startDate = getRoutineStartDate(r);
+    if (startDate && dateString < startDate) {
+      return false;
+    }
+
+    return r.dayOfWeek === dayOfWeek || r.dayOfWeek === 7;
+  });
   
   // Generate unique IDs for routine-generated tasks by hashing dateString + routineId
   return matchingRoutines.map((routine) => {
