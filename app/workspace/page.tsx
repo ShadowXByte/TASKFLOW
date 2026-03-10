@@ -243,8 +243,10 @@ function PageContent() {
     writeAccountCachedTasks,
     readBestAvailableAccountCachedRoutines,
     writeAccountCachedRoutines,
+    readPendingAccountOps,
     pushPendingAccountOp,
     flushPendingAccountOps,
+    readPendingRoutineOps,
     pushPendingRoutineOp,
     flushPendingRoutineOps,
   } = useCacheManagement({
@@ -704,6 +706,19 @@ function PageContent() {
         return;
       }
 
+      // When coming online with pending ops, let sync handle the fetch to avoid race conditions
+      // Sync will: 1) push pending ops to server, 2) fetch fresh data, 3) update cache
+      const hasPendingTaskOps = readPendingAccountOps().length > 0;
+      const hasPendingRoutineOps = readPendingRoutineOps().length > 0;
+      
+      if (!isOffline && (hasPendingTaskOps || hasPendingRoutineOps)) {
+        console.log("[LOAD] Pending ops detected, waiting for sync. Task ops:", hasPendingTaskOps, "Routine ops:", hasPendingRoutineOps);
+        // Use cached data while sync operation handles bidirectional sync
+        setTasks(readBestAvailableAccountCachedTasks());
+        return;
+      }
+
+      console.log("[LOAD] Loading tasks from server");
       setLoadingTasks(true);
       try {
         const response = await fetch("/api/tasks", { cache: "no-store" });
@@ -726,11 +741,14 @@ function PageContent() {
     offlineAccountMode,
     readAccountCachedTasks,
     readBestAvailableAccountCachedTasks,
+    readPendingAccountOps,
+    readPendingRoutineOps,
     status,
     workspaceMode,
     writeAccountCachedTasks,
   ]);
 
+  // Write tasks to cache whenever they change in account mode (online or offline)
   useEffect(() => {
     if (workspaceMode !== "account") {
       return;
@@ -741,10 +759,12 @@ function PageContent() {
     const shouldWriteCache = status === "authenticated" || offlineAccountMode || hasCachedAccountSession || hasOfflineAccountReady;
 
     if (shouldWriteCache) {
+      console.log("[CACHE] Writing tasks to cache:", tasks.length, "tasks");
       writeAccountCachedTasks(tasks);
     }
   }, [workspaceMode, status, offlineAccountMode, hasCachedAccountSession, tasks, writeAccountCachedTasks]);
 
+  // Write routines to cache whenever they change in account mode (online or offline)
   useEffect(() => {
     if (workspaceMode !== "account") {
       return;
@@ -755,6 +775,7 @@ function PageContent() {
     const shouldWriteCache = status === "authenticated" || offlineAccountMode || hasCachedAccountSession || hasOfflineAccountReady;
 
     if (shouldWriteCache) {
+      console.log("[CACHE] Writing routines to cache:", routines.length, "routines");
       writeAccountCachedRoutines(routines);
     }
   }, [workspaceMode, status, offlineAccountMode, hasCachedAccountSession, routines, writeAccountCachedRoutines]);
@@ -1418,8 +1439,13 @@ function PageContent() {
 
     // Optimistic update - feels snappier to users
     if (isOffline) {
-      setTasks((current) => current.map((task) => (task.id === id ? { ...task, completed: !completed } : task)));
+      console.log("[OFFLINE] Toggling task", id, "offline");
+      const updatedTasks = tasks.map((task) => (task.id === id ? { ...task, completed: !completed } : task));
+      setTasks(updatedTasks);
       pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
+      // Immediately write to cache to persist offline changes
+      writeAccountCachedTasks(updatedTasks);
+      console.log("[OFFLINE] Task toggled and cached");
       return;
     }
 
@@ -1528,16 +1554,27 @@ function PageContent() {
             const cachedRoutines = readBestAvailableAccountCachedRoutines();
             setRoutines(cachedRoutines);
           } else {
-            // Fetch from API when online
-            const response = await fetch("/api/routines");
-            if (response.ok) {
-              const data = await response.json();
-              setRoutines(data);
-              writeAccountCachedRoutines(data);
-            } else {
-              // Fallback to cache if API fails
+            // When coming online with pending ops, let sync handle the fetch to avoid race conditions
+            // Sync will: 1) push pending routine ops to server, 2) fetch fresh data, 3) update cache
+            const hasPendingTaskOps = readPendingAccountOps().length > 0;
+            const hasPendingRoutineOps = readPendingRoutineOps().length > 0;
+            
+            if (hasPendingTaskOps || hasPendingRoutineOps) {
+              // Use cached data while sync operation handles bidirectional sync
               const cachedRoutines = readBestAvailableAccountCachedRoutines();
               setRoutines(cachedRoutines);
+            } else {
+              // Fetch from API when online and no pending ops (clean state)
+              const response = await fetch("/api/routines");
+              if (response.ok) {
+                const data = await response.json();
+                setRoutines(data);
+                writeAccountCachedRoutines(data);
+              } else {
+                // Fallback to cache if API fails
+                const cachedRoutines = readBestAvailableAccountCachedRoutines();
+                setRoutines(cachedRoutines);
+              }
             }
           }
         }

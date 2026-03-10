@@ -146,81 +146,106 @@ export function useCacheManagement({
     onTasksUpdated: (tasks: Task[]) => void
   ) => {
     if (workspaceMode !== "account" || status !== "authenticated" || isOffline) {
+      console.log("[SYNC] Skipping flush - workspaceMode:", workspaceMode, "status:", status, "isOffline:", isOffline);
       return;
     }
 
     const ops = readPendingAccountOps();
     if (!ops.length) {
+      console.log("[SYNC] No pending account ops to flush");
       return;
     }
 
+    console.log("[SYNC] Flushing", ops.length, "pending account operations");
     const tempIdMap = new Map<number, number>();
+    let successCount = 0;
+    let failCount = 0;
 
     try {
       for (const op of ops) {
-        if (op.type === "create") {
-          const response = await fetch("/api/tasks", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: op.task.title,
-              description: op.task.description,
-              dueDate: op.task.dueDate,
-              dueTime: op.task.dueTime,
-              priority: op.task.priority,
-            }),
-          });
+        try {
+          if (op.type === "create") {
+            const response = await fetch("/api/tasks", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: op.task.title,
+                description: op.task.description,
+                dueDate: op.task.dueDate,
+                dueTime: op.task.dueTime,
+                priority: op.task.priority,
+              }),
+            });
 
-          if (!response.ok) {
-            throw new Error("create failed");
+            if (!response.ok) {
+              throw new Error("create failed");
+            }
+
+            const created = (await response.json()) as Task;
+            tempIdMap.set(op.tempId, created.id);
+            successCount++;
+            continue;
           }
 
-          const created = (await response.json()) as Task;
-          tempIdMap.set(op.tempId, created.id);
-          continue;
-        }
+          if (op.type === "update") {
+            const resolvedId = tempIdMap.get(op.id) ?? op.id;
+            if (resolvedId < 0) {
+              continue;
+            }
 
-        if (op.type === "update") {
+            const response = await fetch(`/api/tasks/${resolvedId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(op.changes),
+            });
+
+            if (!response.ok) {
+              throw new Error("update failed");
+            }
+            successCount++;
+            continue;
+          }
+
           const resolvedId = tempIdMap.get(op.id) ?? op.id;
           if (resolvedId < 0) {
             continue;
           }
 
           const response = await fetch(`/api/tasks/${resolvedId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(op.changes),
+            method: "DELETE",
           });
 
           if (!response.ok) {
-            throw new Error("update failed");
+            throw new Error("delete failed");
           }
-          continue;
-        }
-
-        const resolvedId = tempIdMap.get(op.id) ?? op.id;
-        if (resolvedId < 0) {
-          continue;
-        }
-
-        const response = await fetch(`/api/tasks/${resolvedId}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          throw new Error("delete failed");
+          successCount++;
+        } catch (opError) {
+          console.error("[SYNC] Operation failed:", op.type, opError);
+          failCount++;
+          // Continue with next operation instead of failing entire sync
         }
       }
 
-      writePendingAccountOps([]);
+      console.log("[SYNC] Completed:", successCount, "succeeded,", failCount, "failed");
 
+      // Only clear pending ops if all succeeded
+      if (failCount === 0) {
+        writePendingAccountOps([]);
+        console.log("[SYNC] Cleared pending ops queue");
+      } else {
+        console.warn("[SYNC] Keeping failed ops in queue for retry");
+      }
+
+      // Always fetch fresh data after sync attempt
       const refresh = await fetch("/api/tasks", { cache: "no-store" });
       if (refresh.ok) {
         const freshTasks = (await refresh.json()) as Task[];
+        console.log("[SYNC] Fetched", freshTasks.length, "fresh tasks from server");
         onTasksUpdated(freshTasks);
         writeAccountCachedTasks(freshTasks);
       }
-    } catch {
+    } catch (error) {
+      console.error("[SYNC] Fatal error during sync:", error);
       return;
     }
   }, [isOffline, readPendingAccountOps, status, workspaceMode, writeAccountCachedTasks, writePendingAccountOps]);
@@ -229,82 +254,107 @@ export function useCacheManagement({
     onRoutinesUpdated: (routines: Routine[]) => void
   ) => {
     if (workspaceMode !== "account" || status !== "authenticated" || isOffline) {
+      console.log("[SYNC ROUTINES] Skipping flush - workspaceMode:", workspaceMode, "status:", status, "isOffline:", isOffline);
       return;
     }
 
     const ops = readPendingRoutineOps();
     if (!ops.length) {
+      console.log("[SYNC ROUTINES] No pending routine ops to flush");
       return;
     }
 
+    console.log("[SYNC ROUTINES] Flushing", ops.length, "pending routine operations");
     const tempIdMap = new Map<number, number>();
+    let successCount = 0;
+    let failCount = 0;
 
     try {
       for (const op of ops) {
-        if (op.type === "create") {
-          const response = await fetch("/api/routines", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              title: op.routine.title,
-              description: op.routine.description,
-              dayOfWeek: op.routine.dayOfWeek,
-              time: op.routine.time,
-              priority: op.routine.priority,
-              isActive: op.routine.isActive,
-            }),
-          });
+        try {
+          if (op.type === "create") {
+            const response = await fetch("/api/routines", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                title: op.routine.title,
+                description: op.routine.description,
+                dayOfWeek: op.routine.dayOfWeek,
+                time: op.routine.time,
+                priority: op.routine.priority,
+                isActive: op.routine.isActive,
+              }),
+            });
 
-          if (!response.ok) {
-            throw new Error("create failed");
+            if (!response.ok) {
+              throw new Error("create failed");
+            }
+
+            const created = (await response.json()) as Routine;
+            tempIdMap.set(op.tempId, created.id);
+            successCount++;
+            continue;
           }
 
-          const created = (await response.json()) as Routine;
-          tempIdMap.set(op.tempId, created.id);
-          continue;
-        }
+          if (op.type === "update") {
+            const resolvedId = tempIdMap.get(op.id) ?? op.id;
+            if (resolvedId < 0) {
+              continue;
+            }
 
-        if (op.type === "update") {
+            const response = await fetch(`/api/routines/${resolvedId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(op.changes),
+            });
+
+            if (!response.ok) {
+              throw new Error("update failed");
+            }
+            successCount++;
+            continue;
+          }
+
           const resolvedId = tempIdMap.get(op.id) ?? op.id;
           if (resolvedId < 0) {
             continue;
           }
 
           const response = await fetch(`/api/routines/${resolvedId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(op.changes),
+            method: "DELETE",
           });
 
           if (!response.ok) {
-            throw new Error("update failed");
+            throw new Error("delete failed");
           }
-          continue;
-        }
-
-        const resolvedId = tempIdMap.get(op.id) ?? op.id;
-        if (resolvedId < 0) {
-          continue;
-        }
-
-        const response = await fetch(`/api/routines/${resolvedId}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          throw new Error("delete failed");
+          successCount++;
+        } catch (opError) {
+          console.error("[SYNC ROUTINES] Operation failed:", op.type, opError);
+          failCount++;
+          // Continue with next operation instead of failing entire sync
         }
       }
 
-      writePendingRoutineOps([]);
+      console.log("[SYNC ROUTINES] Completed:", successCount, "succeeded,", failCount, "failed");
 
+      // Only clear pending ops if all succeeded
+      if (failCount === 0) {
+        writePendingRoutineOps([]);
+        console.log("[SYNC ROUTINES] Cleared pending ops queue");
+      } else {
+        console.warn("[SYNC ROUTINES] Keeping failed ops in queue for retry");
+      }
+
+      // Always fetch fresh data after sync attempt
       const refresh = await fetch("/api/routines", { cache: "no-store" });
       if (refresh.ok) {
         const freshRoutines = (await refresh.json()) as Routine[];
+        console.log("[SYNC ROUTINES] Fetched", freshRoutines.length, "fresh routines from server");
         onRoutinesUpdated(freshRoutines);
         writeAccountCachedRoutines(freshRoutines);
       }
-    } catch {
+    } catch (error) {
+      console.error("[SYNC ROUTINES] Fatal error during sync:", error);
       return;
     }
   }, [isOffline, readPendingRoutineOps, status, workspaceMode, writeAccountCachedRoutines, writePendingRoutineOps]);
