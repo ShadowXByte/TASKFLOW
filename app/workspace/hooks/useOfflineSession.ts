@@ -112,12 +112,25 @@ export function useOfflineSession({
     safeStorageRemoveItem(LAST_ACCOUNT_KEY_STORAGE);
     safeStorageRemoveItem(LAST_TASKS_CACHE_KEY_STORAGE);
 
-    // Also clear all cached account data (tasks, routines, pending ops)
+    // Clear all account-related cache keys from localStorage (for current accountKey)
     if (accountKey) {
       safeStorageRemoveItem(`taskflow_account_tasks:${accountKey}`);
       safeStorageRemoveItem(`taskflow_account_routines:${accountKey}`);
       safeStorageRemoveItem(`taskflow_account_pending_ops:${accountKey}`);
+      safeStorageRemoveItem(`taskflow_account_pending_routine_ops:${accountKey}`);
       safeStorageRemoveItem(`taskflow_account_routine_completions:${accountKey}`);
+    }
+
+    // Also clear any other account keys that might be cached (in case of account switching)
+    if (typeof window !== "undefined") {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith("taskflow_account_") || key.startsWith("taskflow-account-"))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => safeStorageRemoveItem(key));
     }
 
     setHasCachedAccountSession(false);
