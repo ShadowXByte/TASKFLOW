@@ -89,7 +89,12 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white/5 p-6">
+    <form
+      onSubmit={handleSubmit}
+      className={`space-y-3 rounded-xl border p-4 ${
+        darkMode ? 'border-slate-700/60 bg-slate-900/45' : 'border-slate-200/80 bg-white/70'
+      }`}
+    >
       <div>
         <label className={`block text-sm font-medium mb-2 ${
           darkMode ? 'text-slate-300' : 'text-slate-700'
@@ -102,10 +107,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Enter task title..."
           disabled={isSubmitting}
-          className={`w-full rounded-xl border-2 px-4 py-2 text-sm outline-none transition ${
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
             darkMode
-              ? 'border-slate-700 bg-slate-900/50 text-slate-100 placeholder-slate-500'
-              : 'border-slate-200 bg-white/70 text-slate-900 placeholder-slate-400'
+              ? 'border-slate-700 bg-slate-950/55 text-slate-100 placeholder-slate-500'
+              : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400'
           } disabled:opacity-50`}
         />
       </div>
@@ -122,10 +127,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
           placeholder="Enter task description..."
           disabled={isSubmitting}
           rows={3}
-          className={`w-full rounded-xl border-2 px-4 py-2 text-sm outline-none transition ${
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
             darkMode
-              ? 'border-slate-700 bg-slate-900/50 text-slate-100 placeholder-slate-500'
-              : 'border-slate-200 bg-white/70 text-slate-900 placeholder-slate-400'
+              ? 'border-slate-700 bg-slate-950/55 text-slate-100 placeholder-slate-500'
+              : 'border-slate-200 bg-white text-slate-900 placeholder-slate-400'
           } disabled:opacity-50`}
         />
       </div>
@@ -145,10 +150,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
             onChange={(e) => setDueDate(e.target.value)}
             onClick={() => datePickerRef.current?.click()}
             disabled={isSubmitting}
-            className={`w-full rounded-xl border-2 px-4 py-2 text-sm outline-none transition ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
               darkMode
-                ? 'border-slate-700 bg-slate-900/50 text-slate-100'
-                : 'border-slate-200 bg-white/70 text-slate-900'
+                  ? 'border-slate-700 bg-slate-950/55 text-slate-100'
+                  : 'border-slate-200 bg-white text-slate-900'
             } disabled:opacity-50`}
           />
           <input
@@ -172,10 +177,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
             value={dueTime}
             onChange={(e) => setDueTime(e.target.value)}
             disabled={isSubmitting}
-            className={`w-full rounded-xl border-2 px-4 py-2 text-sm outline-none transition ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
               darkMode
-                ? 'border-slate-700 bg-slate-900/50 text-slate-100'
-                : 'border-slate-200 bg-white/70 text-slate-900'
+                ? 'border-slate-700 bg-slate-950/55 text-slate-100'
+                : 'border-slate-200 bg-white text-slate-900'
             } disabled:opacity-50`}
           />
         </div>
@@ -190,10 +195,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
             value={priority}
             onChange={(e) => setPriority(e.target.value as TaskPriority)}
             disabled={isSubmitting}
-            className={`w-full rounded-xl border-2 px-4 py-2 text-sm outline-none transition ${
+            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition ${
               darkMode
-                ? 'border-slate-700 bg-slate-900/50 text-slate-100'
-                : 'border-slate-200 bg-white/70 text-slate-900'
+                ? 'border-slate-700 bg-slate-950/55 text-slate-100'
+                : 'border-slate-200 bg-white text-slate-900'
             } disabled:opacity-50`}
           >
             {PRIORITIES.map((p) => (
@@ -208,10 +213,10 @@ export function TaskForm({ darkMode, minDate, onSubmit }: TaskFormProps) {
       <button
         type="submit"
         disabled={isSubmitting}
-        className={`w-full rounded-xl px-4 py-2 font-medium transition-all duration-200 ${
+        className={`w-full rounded-lg px-4 py-2 font-semibold transition-colors ${
           darkMode
-            ? 'bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-700'
-            : 'bg-blue-500 hover:bg-blue-600 text-white disabled:bg-slate-300'
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-slate-700'
+            : 'bg-emerald-600 hover:bg-emerald-500 text-white disabled:bg-slate-300'
         } disabled:cursor-not-allowed`}
       >
         {isSubmitting ? 'Adding...' : 'Add Task'}

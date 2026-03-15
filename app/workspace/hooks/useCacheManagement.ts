@@ -79,19 +79,6 @@ export function useCacheManagement({
       }
     }
 
-    if (typeof window !== "undefined") {
-      for (let index = 0; index < localStorage.length; index += 1) {
-        const key = localStorage.key(index);
-        if (!key || !key.startsWith(`${ACCOUNT_ROUTINES_CACHE_PREFIX}:`)) {
-          continue;
-        }
-
-        if (readJsonFromStorage<any[]>(key, []).length > 0) {
-          return key;
-        }
-      }
-    }
-
     return accountRoutinesCacheKey;
   }, [accountRoutinesCacheKey]);
 

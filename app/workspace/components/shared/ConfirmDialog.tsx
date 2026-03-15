@@ -24,8 +24,8 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 p-4" style={{ zIndex: 9999 }}>
       <div
-        className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${
-          darkMode ? "border-white/20 bg-slate-900 text-slate-100" : "border-slate-200 bg-white text-slate-900"
+        className={`w-full max-w-md rounded-xl border p-5 ${
+          darkMode ? "border-white/12 bg-slate-900/95 text-slate-100" : "border-slate-200/80 bg-white/95 text-slate-900"
         }`}
         style={{ zIndex: 10000 }}
       >
@@ -37,10 +37,10 @@ export function ConfirmDialog({
           <button
             onClick={onCancel}
             disabled={busy}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
               darkMode
-                ? "bg-slate-700 text-slate-100 hover:bg-slate-600 disabled:opacity-50"
-                : "bg-slate-200 text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+                ? "bg-slate-800 text-slate-100 hover:bg-slate-700 disabled:opacity-50"
+                : "bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
             }`}
           >
             Cancel
@@ -48,7 +48,7 @@ export function ConfirmDialog({
           <button
             onClick={onConfirm}
             disabled={busy}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
           >
             {busy ? "Deleting..." : confirmLabel}
           </button>

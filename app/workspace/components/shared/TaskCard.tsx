@@ -59,17 +59,12 @@ export function TaskCard({
   return (
     <div
       onClick={onToggleExpand}
-      className={`group relative cursor-pointer rounded-xl border backdrop-blur-sm px-4 py-3 transition-all duration-300 hover:scale-[1.02] ${
+      className={`group relative cursor-pointer rounded-lg border px-3.5 py-3 transition-all duration-200 ${
         darkMode
-          ? `border-slate-700/50 bg-slate-800/60 hover:bg-slate-800/80 hover:border-slate-600 shadow-lg shadow-slate-950/20`
-          : `border-slate-200 bg-white/80 shadow-md hover:shadow-lg hover:border-slate-300`
+          ? `border-slate-700/55 bg-slate-900/45 hover:bg-slate-900/70`
+          : `border-slate-200/85 bg-white/75 hover:bg-white`
       }`}
     >
-      {/* Subtle glow effect on hover */}
-      <div className={`absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${
-        darkMode ? 'bg-gradient-to-br from-blue-500/5 to-purple-500/5' : 'bg-gradient-to-br from-blue-500/5 to-purple-500/5'
-      }`} />
-      
       <div className="relative flex items-start gap-3">
         <div className="flex items-center">
           <input
@@ -79,7 +74,7 @@ export function TaskCard({
               e.stopPropagation();
               onToggleComplete(e.target.checked);
             }}
-            className={`h-5 w-5 rounded-lg cursor-pointer accent-blue-500 transition-all duration-200 hover:scale-110 ${
+            className={`h-4.5 w-4.5 rounded-md cursor-pointer accent-emerald-600 transition ${
               task.completed ? 'opacity-60' : 'opacity-100'
             }`}
           />
@@ -87,13 +82,13 @@ export function TaskCard({
         
         <div className="flex-1 min-w-0">
           <p
-            className={`text-base font-semibold transition-all duration-200 ${
+            className={`text-[15px] font-semibold leading-6 transition-colors ${
               task.completed
                 ? darkMode
                   ? 'line-through text-slate-500'
                   : 'line-through text-slate-400'
                 : darkMode
-                  ? 'text-slate-50'
+                  ? 'text-slate-100'
                   : 'text-slate-900'
             }`}
           >
@@ -101,44 +96,41 @@ export function TaskCard({
           </p>
           
           {isExpanded && task.description && (
-            <p className={`mt-2 text-xs leading-relaxed animate-in fade-in slide-in-from-top-2 duration-300 whitespace-pre-line break-words ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p className={`mt-1.5 text-xs leading-relaxed animate-in fade-in duration-200 whitespace-pre-line break-words ${darkMode ? 'text-slate-400' : 'text-slate-600'}`}>
               {task.description}
             </p>
           )}
           
-          <div className="mt-2 flex items-center gap-1.5 text-xs flex-wrap">
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-medium ${
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] flex-wrap">
+            <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-medium ${
               darkMode 
                 ? `${priority.bgDark} ${priority.textDark} ${priority.borderDark}` 
                 : `${priority.bgLight} ${priority.textLight} ${priority.borderLight}`
             }`}>
-              <span className="text-sm">{priority.icon}</span>
+              <span>{priority.icon}</span>
               {priority.label}
             </span>
 
             {isOverdue && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-medium ${
+              <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 font-medium ${
                 darkMode
                   ? 'bg-red-500/20 text-red-300 border-red-500/40'
                   : 'bg-red-100 text-red-700 border-red-200'
               }`}>
-                <span>⚠️</span>
                 Overdue
               </span>
             )}
             
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
-              darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-slate-100 text-slate-700'
+            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${
+              darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
             }`}>
-              <span>📅</span>
               {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
             
             {task.dueTime && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${
-                darkMode ? 'bg-slate-700/50 text-slate-300' : 'bg-slate-100 text-slate-700'
+              <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${
+                darkMode ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-700'
               }`}>
-                <span>⏰</span>
                 {task.dueTime}
               </span>
             )}
@@ -150,7 +142,7 @@ export function TaskCard({
             e.stopPropagation();
             onDelete();
           }}
-          className={`rounded-lg p-2 opacity-0 transition-all duration-300 group-hover:opacity-100 hover:scale-110 active:scale-95 ${
+          className={`rounded-md p-1.5 opacity-0 transition duration-150 group-hover:opacity-100 ${
             darkMode
               ? 'hover:bg-red-500/20 text-red-400 border border-red-500/30'
               : 'hover:bg-red-50 text-red-600 border border-red-200'
