@@ -8,10 +8,10 @@ export default function ClientWrapper() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Show loading screen for at least 2 seconds
+    // Keep a short minimum to avoid abrupt flash while still feeling responsive.
     const timer = setTimeout(() => {
       setIsLoading(false);
-    }, 2000);
+    }, 700);
 
     return () => clearTimeout(timer);
   }, []);

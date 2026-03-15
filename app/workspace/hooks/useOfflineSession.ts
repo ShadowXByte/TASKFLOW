@@ -42,24 +42,46 @@ export function useOfflineSession({
 
     const cachedSession = readJsonFromStorage<any>(CACHED_SESSION_KEY, null);
     const offlineAccountReady = safeStorageGetItem(OFFLINE_ACCOUNT_READY_KEY) === "1";
-    const hasCachedAccount = Boolean(cachedSession?.user || offlineAccountReady);
+    const hasOfflineCacheData = (() => {
+      const lastTasksCacheKey = safeStorageGetItem(LAST_TASKS_CACHE_KEY_STORAGE)?.trim();
+      if (lastTasksCacheKey && readJsonFromStorage<any[]>(lastTasksCacheKey, []).length > 0) {
+        return true;
+      }
+
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key) {
+          continue;
+        }
+
+        if (!key.startsWith("taskflow_account_tasks:") && !key.startsWith("taskflow_account_routines:")) {
+          continue;
+        }
+
+        if (readJsonFromStorage<any[]>(key, []).length > 0) {
+          return true;
+        }
+      }
+
+      return false;
+    })();
+
+    const hasCachedAccount = Boolean(cachedSession?.user || offlineAccountReady || hasOfflineCacheData);
     
     setHasCachedAccountSession(hasCachedAccount);
 
     if (workspaceMode === "account") {
-      if (hasCachedAccount || status === "authenticated") {
-        setCanRenderWorkspace(true);
-      } else if (status === "unauthenticated") {
-        setCanRenderWorkspace(false);
-      }
+      // Require authenticated session or prior account cache in both online and offline states.
+      const canRenderAccountWorkspace = status === "authenticated" || hasCachedAccount;
+      setCanRenderWorkspace(canRenderAccountWorkspace);
     } else {
       setCanRenderWorkspace(true);
     }
 
     // In account mode: activate offline mode when JWT validation unavailable + offline-ready flag set
-    if (workspaceMode === "account" && offlineAccountReady) {
+    if (workspaceMode === "account" && (offlineAccountReady || hasOfflineCacheData)) {
       // JWT validation failed or network down + user has logged in before = use offline cached account
-      if (status !== "authenticated") {
+      if (isOffline && status !== "authenticated") {
         setOfflineAccountMode(true);
         if (cachedSession?.user) {
           const email = cachedSession.user.email || "";
@@ -75,6 +97,7 @@ export function useOfflineSession({
         }
       } else if (status === "authenticated") {
         setOfflineAccountMode(false);
+        setCachedUserInfo(null);
       }
     }
   }, [workspaceMode, isOffline, status]);

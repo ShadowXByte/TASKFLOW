@@ -10,6 +10,12 @@ import ClientWrapper from "./ClientWrapper";
 import { ConfirmDialog } from "./components/shared/ConfirmDialog";
 import { PriorityBadge } from "./components/shared/PriorityBadge";
 import { AlertMessage } from "./components/shared/AlertMessage";
+import {
+  DangerButton,
+  FieldInput,
+  PrimaryButton,
+  WorkspacePanel,
+} from "./components/shared/uiPrimitives";
 
 // Types
 import type {
@@ -67,37 +73,62 @@ import {
 } from "./utils/constants";
 
 // Dynamic imports for code splitting (lazy load section components)
-const TodaySection = dynamic(() => import("./components/sections/TodaySection").then(mod => ({ default: mod.TodaySection })), {
+const SECTION_CODE_LOADERS = {
+  today: () => import("./components/sections/TodaySection"),
+  "all-tasks": () => import("./components/sections/AllTasksSection"),
+  routine: () => import("./components/sections/RoutineSection"),
+  analytics: () => import("./components/sections/AnalyticsSection"),
+  account: () => import("./components/sections/AccountSection"),
+} as const;
+
+const TodaySection = dynamic(() => SECTION_CODE_LOADERS.today().then(mod => ({ default: mod.TodaySection })), {
   loading: () => <SectionLoadingFallback />,
   ssr: true,
 });
 
-const AllTasksSection = dynamic(() => import("./components/sections/AllTasksSection").then(mod => ({ default: mod.AllTasksSection })), {
+const AllTasksSection = dynamic(() => SECTION_CODE_LOADERS["all-tasks"]().then(mod => ({ default: mod.AllTasksSection })), {
   loading: () => <SectionLoadingFallback />,
   ssr: true,
 });
 
-const RoutineSection = dynamic(() => import("./components/sections/RoutineSection").then(mod => ({ default: mod.RoutineSection })), {
+const RoutineSection = dynamic(() => SECTION_CODE_LOADERS.routine().then(mod => ({ default: mod.RoutineSection })), {
   loading: () => <SectionLoadingFallback />,
   ssr: true,
 });
 
-const AnalyticsSection = dynamic(() => import("./components/sections/AnalyticsSection").then(mod => ({ default: mod.AnalyticsSection })), {
+const AnalyticsSection = dynamic(() => SECTION_CODE_LOADERS.analytics().then(mod => ({ default: mod.AnalyticsSection })), {
   loading: () => <SectionLoadingFallback />,
   ssr: true,
 });
 
-const AccountSection = dynamic(() => import("./components/sections/AccountSection").then(mod => ({ default: mod.AccountSection })), {
+const AccountSection = dynamic(() => SECTION_CODE_LOADERS.account().then(mod => ({ default: mod.AccountSection })), {
   loading: () => <SectionLoadingFallback />,
   ssr: true,
 });
+
+const PRIMARY_SECTION_ITEMS: Array<{ id: Exclude<WorkspaceSection, "account">; label: string }> = [
+  { id: "today", label: "Today" },
+  { id: "all-tasks", label: "All Tasks" },
+  { id: "routine", label: "Routine" },
+  { id: "analytics", label: "Analytics" },
+  { id: "help", label: "Help" },
+];
+
+const SECTION_TITLES: Record<WorkspaceSection, string> = {
+  today: "Today's Tasks",
+  "all-tasks": "All Tasks",
+  routine: "Weekly Routine",
+  analytics: "Analytics Dashboard",
+  help: "Help & Guide",
+  account: "Account Settings",
+};
 
 // Loading fallback component for sections
 function SectionLoadingFallback() {
   return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
         <p className="mt-4 text-slate-600">Loading section...</p>
       </div>
     </div>
@@ -154,6 +185,7 @@ function PageContent() {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncMessage, setSyncMessage] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [brandImageError, setBrandImageError] = useState(false);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("today");
   const [analyticsView, setAnalyticsView] = useState<AnalyticsView>("both");
   const [selectedDate, setSelectedDate] = useState(today);
@@ -161,6 +193,12 @@ function PageContent() {
   const [guestUpgradeOpen, setGuestUpgradeOpen] = useState(false);
   const [guestUpgradeLoading, setGuestUpgradeLoading] = useState(false);
   const [guestUpgradeMessage, setGuestUpgradeMessage] = useState("");
+  const prefetchedApiRef = useRef<{ tasks: boolean; routines: boolean; analytics: boolean }>({
+    tasks: false,
+    routines: false,
+    analytics: false,
+  });
+  const preloadedSectionCodeRef = useRef(false);
   const addDatePickerRef = useRef<HTMLInputElement | null>(null);
   const editDatePickerRef = useRef<HTMLInputElement | null>(null);
   const [monthCursor, setMonthCursor] = useState(() => {
@@ -188,6 +226,7 @@ function PageContent() {
   const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
   const [loadingRoutines, setLoadingRoutines] = useState(false);
+  const [routinePlannerDay, setRoutinePlannerDay] = useState<number | "all">("all");
   const [nextGuestRoutineId, setNextGuestRoutineId] = useState(1);
   const [completedRoutineKeys, setCompletedRoutineKeys] = useState<string[]>([]);
   // Compute a stable account key that persists across session changes
@@ -492,18 +531,6 @@ function PageContent() {
       return Array.from(urls);
     };
 
-    const warmupDynamicSections = () => {
-      window.setTimeout(() => {
-        void Promise.allSettled([
-          import("./components/sections/TodaySection"),
-          import("./components/sections/AllTasksSection"),
-          import("./components/sections/RoutineSection"),
-          import("./components/sections/AnalyticsSection"),
-          import("./components/sections/AccountSection"),
-        ]);
-      }, 800);
-    };
-
     const postWarmupMessage = (registration: ServiceWorkerRegistration) => {
       if (safeStorageGetItem(OFFLINE_WARMUP_DONE_KEY) === "1") {
         setOfflineWarmupDone(true);
@@ -543,9 +570,7 @@ function PageContent() {
         }
 
         const shouldWarmup = postWarmupMessage(registration);
-        if (shouldWarmup) {
-          warmupDynamicSections();
-        }
+        void shouldWarmup;
       } catch {
         return;
       }
@@ -557,9 +582,7 @@ function PageContent() {
       navigator.serviceWorker.ready
         .then((registration) => {
           const shouldWarmup = postWarmupMessage(registration);
-          if (shouldWarmup) {
-            warmupDynamicSections();
-          }
+          void shouldWarmup;
         })
         .catch(() => {
           return;
@@ -1104,6 +1127,36 @@ function PageContent() {
       return [...regularTasks, ...visibleRoutineTasks].sort((a, b) => a.dueTime.localeCompare(b.dueTime));
     },
     [tasks, selectedDate, workspaceMode, routines, completedRoutineKeys],
+  );
+
+  const todaySnapshot = useMemo(() => {
+    const completed = tasksForSelectedDay.filter((task) => task.completed).length;
+    const pending = tasksForSelectedDay.length - completed;
+    const overdue = tasksForSelectedDay.filter((task) => {
+      if (task.completed) {
+        return false;
+      }
+
+      const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || "23:59"}:00`).getTime();
+      return !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
+    }).length;
+
+    return { completed, pending, overdue };
+  }, [tasksForSelectedDay]);
+
+  const routinePlannerTabs = useMemo(
+    () => [
+      { key: "all" as const, label: "All" },
+      { key: 7 as const, label: "Daily" },
+      { key: 1 as const, label: "Mon" },
+      { key: 2 as const, label: "Tue" },
+      { key: 3 as const, label: "Wed" },
+      { key: 4 as const, label: "Thu" },
+      { key: 5 as const, label: "Fri" },
+      { key: 6 as const, label: "Sat" },
+      { key: 0 as const, label: "Sun" },
+    ],
+    [],
   );
 
   // Filter + search logic for All Tasks view
@@ -1948,6 +2001,173 @@ function PageContent() {
   // Only show login panel if in account mode but NO cached account data exists
   // Use client-only state to avoid SSR mismatch (localStorage not available on server)
   const showAuthPanel = workspaceMode === "account" && !canRenderWorkspace;
+  const activeSectionTitle = SECTION_TITLES[activeSection];
+  const isEffectivelyOffline = isOffline || offlineAccountMode;
+
+  const runWhenIdle = useCallback((callback: () => void, timeout = 1400) => {
+    if (typeof window === "undefined") {
+      return () => undefined;
+    }
+
+    if ("requestIdleCallback" in window) {
+      const idleId = (window as Window & {
+        requestIdleCallback: (cb: IdleRequestCallback, options?: IdleRequestOptions) => number;
+        cancelIdleCallback: (id: number) => void;
+      }).requestIdleCallback(() => callback(), { timeout });
+
+      return () => {
+        (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(idleId);
+      };
+    }
+
+    const timerId = globalThis.setTimeout(callback, 350);
+    return () => globalThis.clearTimeout(timerId);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || preloadedSectionCodeRef.current) {
+      return;
+    }
+
+    const navigatorWithConnection = navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    };
+    const connection = navigatorWithConnection.connection;
+    const shouldSkipPreload = connection?.saveData || connection?.effectiveType === "slow-2g" || connection?.effectiveType === "2g";
+    if (shouldSkipPreload) {
+      return;
+    }
+
+    preloadedSectionCodeRef.current = true;
+
+    const initialPreloadSection: Exclude<WorkspaceSection, "help"> =
+      activeSection === "help" || activeSection === "account" ? "today" : activeSection;
+
+    const preloadOrder: Array<Exclude<WorkspaceSection, "help">> = [
+      initialPreloadSection,
+      "today",
+      "all-tasks",
+      "routine",
+      "analytics",
+      "account",
+    ];
+    const uniqueSections = preloadOrder.filter((section, index) => preloadOrder.indexOf(section) === index);
+
+    const cleanupIdleCallbacks: Array<() => void> = [];
+    const timeoutIds: number[] = [];
+
+    uniqueSections.forEach((section, index) => {
+      const cancel = runWhenIdle(() => {
+        const timeoutId = window.setTimeout(() => {
+          void SECTION_CODE_LOADERS[section]();
+        }, index * 220);
+        timeoutIds.push(timeoutId);
+      }, 1200 + index * 250);
+      cleanupIdleCallbacks.push(cancel);
+    });
+
+    return () => {
+      cleanupIdleCallbacks.forEach(cancel => cancel());
+      timeoutIds.forEach(timeoutId => window.clearTimeout(timeoutId));
+    };
+  }, [activeSection, runWhenIdle]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (workspaceMode !== "account" || status !== "authenticated" || isEffectivelyOffline) {
+      return;
+    }
+
+    const nextResourceOrder: Array<"tasks" | "routines"> =
+      activeSection === "routine"
+        ? ["routines", "tasks"]
+        : activeSection === "analytics"
+          ? ["tasks", "routines"]
+          : ["tasks", "routines"];
+
+    const resourcesToPrefetch = nextResourceOrder.filter(resource => !prefetchedApiRef.current[resource]);
+    if (!resourcesToPrefetch.length) {
+      return;
+    }
+
+    const cleanupIdleCallbacks: Array<() => void> = [];
+    const timeoutIds: number[] = [];
+
+    resourcesToPrefetch.forEach((resource, index) => {
+      const cancel = runWhenIdle(() => {
+        const timeoutId = window.setTimeout(() => {
+          if (resource === "tasks" && !prefetchedApiRef.current.tasks) {
+            prefetchedApiRef.current.tasks = true;
+            void fetch("/api/tasks", { cache: "no-store" })
+              .then(async (response) => {
+                if (!response.ok) {
+                  throw new Error("tasks prefetch failed");
+                }
+                const data = (await response.json()) as Task[];
+                writeAccountCachedTasks(data);
+              })
+              .catch(() => {
+                prefetchedApiRef.current.tasks = false;
+              });
+          }
+
+          if (resource === "routines" && !prefetchedApiRef.current.routines) {
+            prefetchedApiRef.current.routines = true;
+            void fetch("/api/routines", { cache: "no-store" })
+              .then(async (response) => {
+                if (!response.ok) {
+                  throw new Error("routines prefetch failed");
+                }
+                const data = (await response.json()) as import("./types").Routine[];
+                writeAccountCachedRoutines(data);
+              })
+              .catch(() => {
+                prefetchedApiRef.current.routines = false;
+              });
+          }
+        }, index * 220);
+        timeoutIds.push(timeoutId);
+      }, 1100 + index * 260);
+      cleanupIdleCallbacks.push(cancel);
+    });
+
+    return () => {
+      cleanupIdleCallbacks.forEach(cancel => cancel());
+      timeoutIds.forEach(timeoutId => window.clearTimeout(timeoutId));
+    };
+  }, [
+    activeSection,
+    isEffectivelyOffline,
+    runWhenIdle,
+    status,
+    workspaceMode,
+    writeAccountCachedRoutines,
+    writeAccountCachedTasks,
+  ]);
+
+  const BrandMark = ({ compact = false }: { compact?: boolean }) => (
+    <>
+      {brandImageError ? (
+        <span className={`inline-flex items-center justify-center rounded-full bg-emerald-600/90 text-white font-bold ${compact ? "h-4 w-4 text-[10px]" : "h-5 w-5 text-[11px]"}`}>
+          T
+        </span>
+      ) : (
+        <Image
+          src="/unnamed.jpg"
+          alt="Taskflow logo"
+          width={compact ? 16 : 18}
+          height={compact ? 16 : 18}
+          className="rounded-full"
+          unoptimized
+          onError={() => setBrandImageError(true)}
+        />
+      )}
+      TASKFLOW
+    </>
+  );
 
   const openAddDatePicker = () => {
     const picker = addDatePickerRef.current;
@@ -2143,18 +2363,18 @@ function PageContent() {
     <main
       className={`relative h-screen overflow-hidden flex flex-col ${
         darkMode
-          ? "bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100"
-          : "bg-gradient-to-br from-slate-50 via-white to-blue-50"
+          ? "bg-[radial-gradient(circle_at_top_right,_#1f2937_0%,_#0f172a_45%,_#020617_100%)] text-slate-100"
+          : "bg-[radial-gradient(circle_at_top_right,_#dff2e9_0%,_#f4f7f6_46%,_#edf4f1_100%)]"
       }`}
     >
       <div
         className={`pointer-events-none fixed -top-20 right-0 h-72 w-72 rounded-full blur-3xl ${
-          darkMode ? "bg-blue-500/15" : "bg-blue-300/30"
+          darkMode ? "bg-emerald-500/15" : "bg-emerald-300/30"
         }`}
       />
       <div
         className={`pointer-events-none fixed bottom-0 left-0 h-80 w-80 rounded-full blur-3xl ${
-          darkMode ? "bg-indigo-500/15" : "bg-indigo-300/25"
+          darkMode ? "bg-teal-500/15" : "bg-teal-300/25"
         }`}
       />
 
@@ -2162,14 +2382,13 @@ function PageContent() {
       <div className="flex flex-1 min-h-0">
         {/* Sidebar - Desktop Fixed */}
       <aside
-        className={`hidden lg:flex flex-col w-64 h-full overflow-y-auto p-6 backdrop-blur-xl border-r transition-all ${
-          darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+        className={`hidden lg:flex flex-col w-56 h-full overflow-y-auto p-4 backdrop-blur-xl border-r transition-all ${
+          darkMode ? "bg-slate-900/55 border-white/12" : "bg-white/35 border-slate-200/65"
         }`}
       >
         <div className="mb-8">
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600">
-            <Image src="/unnamed.jpg" alt="Taskflow logo" width={16} height={16} className="rounded-full" />
-            TASKFLOW
+          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-600">
+            <BrandMark compact />
           </p>
           {showOfflineWarmup && (
             <div className="mt-3">
@@ -2177,13 +2396,13 @@ function PageContent() {
                 <p className={`text-[11px] font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                   Preparing offline access
                 </p>
-                <span className={`text-[11px] font-semibold ${darkMode ? "text-blue-300" : "text-blue-700"}`}>
+                <span className={`text-[11px] font-semibold ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
                   {offlineWarmupPercent}%
                 </span>
               </div>
               <div className={`h-1.5 w-full overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-200"}`}>
                 <div
-                  className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                  className="h-full rounded-full bg-emerald-600 transition-all duration-300"
                   style={{ width: `${offlineWarmupPercent}%` }}
                 />
               </div>
@@ -2210,29 +2429,32 @@ function PageContent() {
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 space-y-2" suppressHydrationWarning>
-          {[
-            { id: "today", label: "📅 Today", icon: "📅" },
-            { id: "all-tasks", label: "📋 All Tasks", icon: "📋" },
-            { id: "routine", label: "🔁 Routine", icon: "🔁" },
-            { id: "analytics", label: "📊 Analytics", icon: "📊" },
-            { id: "help", label: "❓ Help", icon: "❓" },
-          ].map((item) => (
+        <nav className="flex-1 space-y-1.5" suppressHydrationWarning>
+          {PRIMARY_SECTION_ITEMS.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id as WorkspaceSection)}
               suppressHydrationWarning
-              className={`w-full text-left px-4 py-3 rounded-lg font-semibold transition ${
+              className={`w-full text-left px-3.5 py-2.5 rounded-md font-semibold transition flex items-center gap-2 ${
                 activeSection === item.id
                   ? darkMode
-                    ? "bg-white/20 text-slate-100"
-                    : "bg-white/70 text-slate-900"
+                    ? "bg-white/14 text-slate-100"
+                    : "bg-white/75 text-slate-900"
                   : darkMode
-                    ? "text-slate-300 hover:bg-white/10"
-                    : "text-slate-700 hover:bg-white/50"
+                    ? "text-slate-300 hover:bg-white/8"
+                    : "text-slate-700 hover:bg-white/55"
               }`}
             >
-              {item.label}
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  activeSection === item.id
+                    ? "bg-emerald-500"
+                    : darkMode
+                      ? "bg-slate-600"
+                      : "bg-slate-300"
+                }`}
+              />
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -2247,7 +2469,7 @@ function PageContent() {
                 : "text-slate-700 hover:bg-white/50"
             }`}
           >
-            {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+            {darkMode ? "Light Mode" : "Dark Mode"}
           </button>
 
           {canInstallApp && !isInstalledApp && (
@@ -2259,7 +2481,7 @@ function PageContent() {
                   : "text-slate-700 hover:bg-white/50"
               }`}
             >
-              📱 Install App
+                Install App
             </button>
           )}
 
@@ -2277,7 +2499,7 @@ function PageContent() {
                       : "text-slate-700 hover:bg-white/50"
                 }`}
               >
-                👤 Account
+                Account
               </button>
 
               {status === "authenticated" && (
@@ -2287,7 +2509,7 @@ function PageContent() {
                   }}
                   className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium transition text-red-500 hover:bg-red-500/10`}
                 >
-                  🚪 Logout
+                  Logout
                 </button>
               )}
             </>
@@ -2298,7 +2520,7 @@ function PageContent() {
               href="/workspace?mode=account"
               className={`flex-1 text-center px-3 py-2 rounded-lg text-xs font-semibold transition ${
                 workspaceMode === "account"
-                  ? "bg-blue-600 text-white"
+                  ? "bg-emerald-600 text-white"
                   : darkMode
                     ? "bg-white/10 text-slate-300 hover:bg-white/20"
                     : "bg-white/50 text-slate-700 hover:bg-white/70"
@@ -2344,60 +2566,64 @@ function PageContent() {
       {mobileMenuOpen && (
         <aside
           className={`lg:hidden fixed left-0 top-0 h-screen w-64 p-6 z-40 backdrop-blur-xl border-r space-y-4 overflow-y-auto ${
-            darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+            darkMode ? "bg-slate-900/60 border-white/12" : "bg-white/42 border-slate-200/70"
           }`}
         >
           <button
             onClick={() => setMobileMenuOpen(false)}
-            className="ml-auto block"
+            className={`ml-auto block rounded-md px-2 py-1 text-sm transition ${
+              darkMode ? "text-slate-200 hover:bg-white/10" : "text-slate-700 hover:bg-white/70"
+            }`}
           >
             ✕
           </button>
-          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600">
-            <Image src="/unnamed.jpg" alt="Taskflow logo" width={16} height={16} className="rounded-full" />
-            TASKFLOW
+          <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-600">
+            <BrandMark compact />
           </p>
 
           <nav className="space-y-2">
-            {[
-              { id: "today", label: "📅 Today" },
-              { id: "all-tasks", label: "📋 All Tasks" },
-              { id: "routine", label: "🔁 Routine" },
-              { id: "analytics", label: "📊 Analytics" },
-              { id: "help", label: "❓ Help" },
-            ].map((item) => (
+            {PRIMARY_SECTION_ITEMS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => {
                   setActiveSection(item.id as WorkspaceSection);
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2 rounded-lg font-medium transition ${
+                className={`w-full text-left px-3.5 py-2.5 rounded-md font-semibold transition flex items-center gap-2 ${
                   activeSection === item.id
                     ? darkMode
-                      ? "bg-white/20 text-slate-100"
-                      : "bg-white/70 text-slate-900"
+                      ? "bg-white/14 text-slate-100"
+                      : "bg-white/75 text-slate-900"
                     : darkMode
-                      ? "text-slate-300 hover:bg-white/10"
-                      : "text-slate-700 hover:bg-white/50"
+                      ? "text-slate-300 hover:bg-white/8"
+                      : "text-slate-700 hover:bg-white/55"
                 }`}
               >
-                {item.label}
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    activeSection === item.id
+                      ? "bg-emerald-500"
+                      : darkMode
+                        ? "bg-slate-600"
+                        : "bg-slate-300"
+                  }`}
+                />
+                <span>{item.label}</span>
               </button>
             ))}
           </nav>
 
-          <div className="space-y-2 border-t border-white/20 pt-4">
+          <div className={`space-y-2 border-t pt-4 ${darkMode ? "border-white/12" : "border-slate-200/70"}`}>
             <button
               onClick={() => {
                 setDarkMode((current) => !current);
                 setMobileMenuOpen(false);
               }}
-              className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium ${
-                darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/50"
+              className={`w-full text-left px-3.5 py-2 rounded-md text-sm font-medium ${
+                darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/55"
               }`}
             >
-              {darkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
+              {darkMode ? "Light Mode" : "Dark Mode"}
             </button>
 
             {canInstallApp && !isInstalledApp && (
@@ -2406,11 +2632,11 @@ function PageContent() {
                   void triggerInstallPrompt();
                   setMobileMenuOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium ${
-                  darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/50"
+                className={`w-full text-left px-3.5 py-2 rounded-md text-sm font-medium ${
+                  darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/55"
                 }`}
               >
-                📱 Install App
+                Install App
               </button>
             )}
 
@@ -2421,17 +2647,17 @@ function PageContent() {
                     setActiveSection("account");
                     setMobileMenuOpen(false);
                   }}
-                  className={`w-full text-left px-4 py-2 rounded-lg text-sm font-medium ${
+                  className={`w-full text-left px-3.5 py-2 rounded-md text-sm font-medium ${
                     activeSection === "account"
                       ? darkMode
-                        ? "bg-white/20 text-slate-100"
-                        : "bg-white/70 text-slate-900"
+                        ? "bg-white/14 text-slate-100"
+                        : "bg-white/75 text-slate-900"
                       : darkMode
                         ? "text-slate-300 hover:bg-white/10"
-                        : "text-slate-700 hover:bg-white/50"
+                        : "text-slate-700 hover:bg-white/55"
                   }`}
                 >
-                  👤 Account
+                  Account
                 </button>
 
                 {status === "authenticated" && (
@@ -2442,7 +2668,7 @@ function PageContent() {
                     }}
                     className="w-full text-left px-4 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10"
                   >
-                    🚪 Logout
+                    Logout
                   </button>
                 )}
               </>
@@ -2454,7 +2680,7 @@ function PageContent() {
                 onClick={() => setMobileMenuOpen(false)}
                 className={`flex-1 text-center px-3 py-2 rounded-lg text-xs font-semibold transition ${
                   workspaceMode === "account"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-emerald-600 text-white"
                     : darkMode
                       ? "bg-white/10 text-slate-300 hover:bg-white/20"
                       : "bg-white/50 text-slate-700 hover:bg-white/70"
@@ -2496,8 +2722,8 @@ function PageContent() {
       <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-8 md:py-8">
         <div className="mx-auto w-full max-w-7xl space-y-6">
           <div
-            className={`lg:hidden sticky top-0 z-30 flex items-center justify-between rounded-2xl px-3 py-2 border backdrop-blur-xl ${
-              darkMode ? "bg-slate-900/80 border-white/20" : "bg-white/85 border-white/70"
+            className={`lg:hidden sticky top-0 z-30 flex items-center justify-between rounded-xl px-3 py-2 border backdrop-blur-xl ${
+                darkMode ? "bg-slate-900/78 border-white/12" : "bg-white/78 border-slate-200/80"
             }`}
           >
             <button
@@ -2509,16 +2735,15 @@ function PageContent() {
             >
               ☰
             </button>
-            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-blue-600">
-              <Image src="/unnamed.jpg" alt="Taskflow logo" width={16} height={16} className="rounded-full" />
-              TASKFLOW
+            <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-600">
+              <BrandMark compact />
             </p>
             <span className="h-9 w-9" />
           </div>
 
           {showOfflineWarmup && (
             <div
-              className={`lg:hidden sticky top-[58px] z-20 -mt-3 rounded-xl px-3 py-2 border backdrop-blur-xl ${
+              className={`lg:hidden sticky top-[56px] z-20 -mt-3 rounded-xl px-3 py-2 border backdrop-blur-xl ${
                 darkMode ? "bg-slate-900/80 border-white/20" : "bg-white/85 border-white/70"
               }`}
             >
@@ -2526,13 +2751,13 @@ function PageContent() {
                 <p className={`text-[11px] font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                   Preparing offline access
                 </p>
-                <span className={`text-[11px] font-semibold ${darkMode ? "text-blue-300" : "text-blue-700"}`}>
+                <span className={`text-[11px] font-semibold ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
                   {offlineWarmupPercent}%
                 </span>
               </div>
               <div className={`h-1.5 w-full overflow-hidden rounded-full ${darkMode ? "bg-slate-700" : "bg-slate-200"}`}>
                 <div
-                  className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                  className="h-full rounded-full bg-emerald-600 transition-all duration-300"
                   style={{ width: `${offlineWarmupPercent}%` }}
                 />
               </div>
@@ -2541,7 +2766,7 @@ function PageContent() {
 
           {syncInProgress && (
             <div
-              className={`lg:hidden sticky top-[58px] z-20 -mt-3 rounded-xl px-3 py-2 border backdrop-blur-xl ${
+              className={`lg:hidden sticky top-[56px] z-20 -mt-3 rounded-xl px-3 py-2 border backdrop-blur-xl ${
                 darkMode ? "bg-slate-900/80 border-white/20" : "bg-white/85 border-white/70"
               }`}
             >
@@ -2564,46 +2789,72 @@ function PageContent() {
 
           {/* Header */}
           <header
-            className={`rounded-3xl p-6 shadow-xl backdrop-blur-xl border ${
-              darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+            className={`rounded-2xl p-6 backdrop-blur-xl border ${
+              darkMode ? "bg-slate-900/58 border-white/12" : "bg-white/70 border-slate-200/75"
             }`}
           >
             <h1 className={`text-3xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
-              {activeSection === "today" && "Today's Tasks"}
-              {activeSection === "all-tasks" && "All Tasks"}
-              {activeSection === "routine" && "Weekly Routine"}
-              {activeSection === "analytics" && "Analytics Dashboard"}
-              {activeSection === "account" && "Account Settings"}
+              {activeSectionTitle}
             </h1>
             <p className={`mt-2 ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
               {workspaceMode === "guest"
-                ? "✨ Guest mode stores tasks in your browser only."
+                ? "Guest mode stores tasks in your browser only."
                 : offlineAccountMode
-                  ? `📴 Offline account: ${email || "Using cached data"}`
+                  ? `Offline account: ${email || "Using cached data"}`
                   : status === "authenticated"
-                    ? `🔐 Synced account: ${session?.user?.email}`
+                    ? `Synced account: ${session?.user?.email}`
                     : "Sign in to sync your tasks."}
             </p>
-            {isOffline && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${
+                  workspaceMode === "account"
+                    ? "bg-emerald-600/15 text-emerald-700"
+                    : darkMode
+                      ? "bg-slate-700 text-slate-200"
+                      : "bg-slate-200 text-slate-700"
+                }`}
+              >
+                {workspaceMode === "account" ? "Account" : "Guest"}
+              </span>
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${
+                  isEffectivelyOffline
+                    ? darkMode
+                      ? "bg-amber-500/20 text-amber-300"
+                      : "bg-amber-100 text-amber-700"
+                    : darkMode
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {isEffectivelyOffline ? "Offline" : "Online"}
+              </span>
+              {status === "authenticated" && (
+                <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${darkMode ? "bg-slate-700 text-slate-200" : "bg-slate-200 text-slate-700"}`}>
+                  Authenticated
+                </span>
+              )}
+            </div>
+            {isEffectivelyOffline && (
               <p className={`mt-1 text-xs font-medium ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
                 Offline mode: Changes will sync when internet returns.
               </p>
             )}
           </header>
 
-
           {/* Loading State - only show if NO cached account data */}
           {status === "loading" && workspaceMode === "account" && !canRenderWorkspace ? (
-            <div className={`rounded-2xl p-6 backdrop-blur-md border shadow-lg animate-fade-in flex items-center gap-3 ${
-              darkMode ? "bg-white/10 border-white/20 text-slate-300" : "bg-white/40 border-white/50 text-slate-700"
+            <div className={`rounded-xl p-5 backdrop-blur-md border animate-fade-in flex items-center gap-3 ${
+              darkMode ? "bg-slate-900/52 border-white/12 text-slate-300" : "bg-white/62 border-slate-200/75 text-slate-700"
             }`}>
               <div className="animate-spin h-5 w-5 border-2 border-current border-t-transparent rounded-full"></div>
               Loading account session...
             </div>
           ) : showAuthPanel ? (
             /* Auth Panel */
-            <section className={`mx-auto w-full max-w-lg rounded-3xl p-8 backdrop-blur-lg border shadow-xl animate-scale-in ${
-              darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+            <section className={`mx-auto w-full max-w-lg rounded-2xl p-8 backdrop-blur-lg border animate-scale-in ${
+              darkMode ? "bg-slate-900/56 border-white/12" : "bg-white/72 border-slate-200/80"
             }`}>
               <h2 className={`text-3xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Account Access</h2>
               <p className={`mt-2 ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Login or register to sync your tasks securely across devices.</p>
@@ -2615,7 +2866,7 @@ function PageContent() {
                   onClick={() => setAuthTab("login")}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
                     authTab === "login"
-                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md"
+                      ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-md"
                       : darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/50"
                   }`}
                 >
@@ -2625,24 +2876,23 @@ function PageContent() {
                   onClick={() => setAuthTab("register")}
                   className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
                     authTab === "register"
-                      ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-md"
+                      ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-md"
                       : darkMode ? "text-slate-300 hover:bg-white/10" : "text-slate-700 hover:bg-white/50"
                   }`}
                 >
                   Register
                 </button>
               </div>
-
               <div className="mt-6 space-y-3.5">
                 {authTab === "register" && (
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     placeholder="Full name"
-                    className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                    className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                       darkMode
-                        ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                        : "border-slate-200 bg-white/70 text-slate-900"
+                        ? "border-slate-700 bg-slate-950/55 text-slate-100"
+                        : "border-slate-200 bg-white text-slate-900"
                     }`}
                   />
                 )}
@@ -2651,10 +2901,10 @@ function PageContent() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="Email address"
-                  className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                  className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                     darkMode
-                      ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                      : "border-slate-200 bg-white/70 text-slate-900"
+                      ? "border-slate-700 bg-slate-950/55 text-slate-100"
+                      : "border-slate-200 bg-white text-slate-900"
                   }`}
                 />
                 <input
@@ -2662,16 +2912,16 @@ function PageContent() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Password (min 6 chars)"
-                  className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                  className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                     darkMode
-                      ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                      : "border-slate-200 bg-white/70 text-slate-900"
+                      ? "border-slate-700 bg-slate-950/55 text-slate-100"
+                      : "border-slate-200 bg-white text-slate-900"
                   }`}
                 />
                 <button
                   onClick={submitAuth}
                   disabled={authLoading}
-                  className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-2"
+                  className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {authLoading && <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>}
                   {authLoading ? "Please wait..." : authTab === "register" ? "Create Account" : "Sign In"}
@@ -2684,12 +2934,134 @@ function PageContent() {
           ) : activeSection === "today" ? (
             /* TODAY SECTION */
             <div className="space-y-6 animate-fade-in">
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+              <section className={`rounded-2xl p-6 backdrop-blur-xl border ${
+                darkMode ? "bg-slate-900/55 border-white/12" : "bg-white/72 border-slate-200/80"
               }`}>
-                <div className="grid gap-6 md:grid-cols-[280px_1fr]">
-                  {/* Mini Calendar */}
-                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
+                <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,2.2fr)]">
+                  {/* Today Tasks List */}
+                  <div className="order-2 lg:order-2 min-w-0">
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className={`text-2xl font-bold tracking-tight ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
+                        {formatDisplayDate(selectedDate)}
+                      </h3>
+                      {tasksForSelectedDay.length > 0 && (
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          darkMode ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        }`}>
+                          {tasksForSelectedDay.length} task{tasksForSelectedDay.length !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                      {tasksForSelectedDay.length === 0 ? (
+                        <li className={`relative overflow-hidden rounded-lg border border-dashed p-6 text-center ${
+                          darkMode ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-600"
+                        }`}>
+                          <div className="text-4xl mb-3 animate-bounce">✨</div>
+                          <p className="text-base font-bold mb-1">All clear!</p>
+                          <p className="text-xs opacity-75">Enjoy your free time.</p>
+                          <div className={`absolute top-4 right-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
+                            darkMode ? "bg-emerald-500" : "bg-emerald-400"
+                          }`} />
+                          <div className={`absolute bottom-4 left-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
+                            darkMode ? "bg-teal-500" : "bg-teal-400"
+                          }`} />
+                        </li>
+                      ) : (
+                        tasksForSelectedDay.map((task) => {
+                          const priorityConfig = {
+                            HIGH: { icon: '🔴', color: darkMode ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200' },
+                            MEDIUM: { icon: '🟡', color: darkMode ? 'bg-amber-500/20 text-amber-200 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' },
+                            LOW: { icon: '🟢', color: darkMode ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+                          };
+                          const priority = priorityConfig[task.priority];
+                          const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
+                          const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
+
+                          return (
+                            <li
+                              key={task.id}
+                              onClick={() => toggleTaskExpanded(task.id)}
+                              className={`group relative rounded-lg border p-3 transition-colors overflow-hidden ${
+                                darkMode
+                                  ? "bg-slate-900/50 border-slate-700/60 hover:bg-slate-900/65"
+                                  : "bg-white/70 border-slate-200/80 hover:bg-white"
+                              } cursor-pointer`}
+                            >
+                              <div className="relative flex items-start justify-between gap-3 min-w-0">
+                                <div className="flex-1 min-w-0 space-y-2">
+                                  <p
+                                    className={`w-full text-left text-base font-bold break-all transition-colors ${
+                                      darkMode ? "text-slate-100" : "text-slate-900"
+                                    } ${task.completed ? "line-through opacity-60" : ""}`}
+                                  >
+                                    {task.title}
+                                  </p>
+
+                                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${priority.color}`}>
+                                      <span className="text-sm">{priority.icon}</span>
+                                      {task.priority}
+                                    </span>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                                      darkMode ? "bg-slate-800/60 text-slate-300" : "bg-slate-100/80 text-slate-700"
+                                    }`}>
+                                      <span>⏰</span>
+                                      {task.dueTime}
+                                    </span>
+                                    {task.routineId && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+                                        darkMode ? "bg-emerald-500/20 text-emerald-200 border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      }`}>
+                                        Routine
+                                      </span>
+                                    )}
+                                    {isOverdue && (
+                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+                                        darkMode ? "bg-red-500/20 text-red-300 border-red-500/40" : "bg-red-100 text-red-700 border-red-200"
+                                      }`}>
+                                        Overdue
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {expandedTaskIds.includes(task.id) && task.description && (
+                                    <div className={`mt-2 rounded-lg border px-3 py-2 text-xs backdrop-blur-sm ${
+                                      darkMode
+                                        ? "border-slate-700 bg-slate-900/70 text-slate-300"
+                                        : "border-slate-200 bg-white/80 text-slate-700"
+                                    } whitespace-pre-line break-words`}>
+                                      {task.description}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2 shrink-0">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleTask(task.id, task.completed);
+                                    }}
+                                    className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                                      task.completed
+                                        ? "bg-amber-600 text-white hover:bg-amber-700"
+                                        : "bg-emerald-600 text-white hover:bg-emerald-700"
+                                    }`}
+                                  >
+                                    {task.completed ? "Undo" : "Done"}
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                  </div>
+
+                  {/* Right Rail: Mini Calendar + Snapshot */}
+                  <div className="order-1 lg:order-1 space-y-4">
+                    <div className={`rounded-xl border p-3 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <button
                         onClick={goToPreviousMonth}
@@ -2698,7 +3070,9 @@ function PageContent() {
                           darkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white/70 text-slate-700 hover:bg-white"
                         }`}
                       >
-                        ←
+                        <svg className="mx-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 18l-6-6 6-6" />
+                        </svg>
                       </button>
                       <p className={`text-center font-bold ${darkMode ? "text-slate-200" : "text-slate-800"}`}>
                         {monthTitle}
@@ -2710,7 +3084,9 @@ function PageContent() {
                           darkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white/70 text-slate-700 hover:bg-white"
                         }`}
                       >
-                        →
+                        <svg className="mx-auto h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" />
+                        </svg>
                       </button>
                     </div>
                     <button
@@ -2741,7 +3117,7 @@ function PageContent() {
                             onClick={() => setSelectedDate(dayKey)}
                             className={`rounded-lg p-1 text-xs font-semibold transition ${
                               isSelected
-                                ? "bg-blue-600 text-white"
+                                ? "bg-emerald-600 text-white"
                                 : darkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white/50 hover:bg-white/80"
                             } ${!isCurrentMonth ? "opacity-30" : ""}`}
                           >
@@ -2757,130 +3133,25 @@ function PageContent() {
                     </div>
                   </div>
 
-                  {/* Today Tasks List */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-4">
-                      <h3 className={`text-2xl font-bold tracking-tight ${darkMode ? "text-slate-100" : "text-slate-900"}`}>
-                        {formatDisplayDate(selectedDate)}
-                      </h3>
-                      {tasksForSelectedDay.length > 0 && (
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                          darkMode ? "bg-blue-500/20 text-blue-200 border-blue-500/30" : "bg-blue-50 text-blue-700 border-blue-200"
-                        }`}>
-                          {tasksForSelectedDay.length} task{tasksForSelectedDay.length !== 1 ? 's' : ''}
-                        </span>
-                      )}
+                    <div className={`rounded-xl border p-3 ${darkMode ? "bg-slate-900/45 border-slate-700/60" : "bg-white/70 border-slate-200/80"}`}>
+                      <p className={`text-xs uppercase tracking-wider font-semibold mb-3 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
+                        Daily Snapshot
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className={`rounded-md p-2 ${darkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                          <p className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Pending</p>
+                          <p className="text-lg font-bold text-amber-500">{todaySnapshot.pending}</p>
+                        </div>
+                        <div className={`rounded-md p-2 ${darkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                          <p className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Done</p>
+                          <p className="text-lg font-bold text-emerald-500">{todaySnapshot.completed}</p>
+                        </div>
+                        <div className={`rounded-md p-2 ${darkMode ? "bg-slate-800" : "bg-slate-100"}`}>
+                          <p className={`text-[10px] ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Overdue</p>
+                          <p className="text-lg font-bold text-red-500">{todaySnapshot.overdue}</p>
+                        </div>
+                      </div>
                     </div>
-                    <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                      {tasksForSelectedDay.length === 0 ? (
-                        <li className={`relative overflow-hidden rounded-xl border-2 border-dashed p-6 text-center ${
-                          darkMode ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-600"
-                        }`}>
-                          <div className="text-4xl mb-3 animate-bounce">✨</div>
-                          <p className="text-base font-bold mb-1">All clear!</p>
-                          <p className="text-xs opacity-75">Enjoy your free time.</p>
-                          <div className={`absolute top-4 right-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
-                            darkMode ? "bg-blue-500" : "bg-blue-400"
-                          }`} />
-                          <div className={`absolute bottom-4 left-4 w-24 h-24 rounded-full blur-3xl opacity-20 ${
-                            darkMode ? "bg-purple-500" : "bg-purple-400"
-                          }`} />
-                        </li>
-                      ) : (
-                        tasksForSelectedDay.map((task) => {
-                          const priorityConfig = {
-                            HIGH: { icon: '🔴', color: darkMode ? 'bg-red-500/20 text-red-200 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200' },
-                            MEDIUM: { icon: '🟡', color: darkMode ? 'bg-amber-500/20 text-amber-200 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' },
-                            LOW: { icon: '🟢', color: darkMode ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-                          };
-                          const priority = priorityConfig[task.priority];
-                          const dueTimestamp = new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`).getTime();
-                          const isOverdue = !task.completed && !Number.isNaN(dueTimestamp) && dueTimestamp < Date.now();
-                          
-                          return (
-                            <li
-                              key={task.id}
-                              onClick={() => toggleTaskExpanded(task.id)}
-                              className={`group relative rounded-xl border p-3 backdrop-blur-sm shadow-lg transition-all duration-300 hover:scale-[1.01] hover:shadow-xl overflow-hidden ${
-                                darkMode
-                                  ? "bg-slate-900/60 border-slate-700/50 hover:bg-slate-900/70"
-                                  : "bg-white/60 border-slate-200/60 hover:bg-white/80"
-                              } cursor-pointer`}
-                            >
-                              {/* Hover glow effect */}
-                              <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none bg-gradient-to-br ${
-                                darkMode ? "from-blue-500/5 to-purple-500/5" : "from-blue-400/10 to-purple-400/10"
-                              }`} />
-                              
-                              <div className="relative flex items-start justify-between gap-3 min-w-0">
-                                <div className="flex-1 min-w-0 space-y-2">
-                                  <p
-                                    className={`w-full text-left text-base font-bold break-all transition-colors ${
-                                      darkMode ? "text-slate-100" : "text-slate-900"
-                                    } ${task.completed ? "line-through opacity-60" : ""}`}
-                                  >
-                                    {task.title}
-                                  </p>
-                                  
-                                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${priority.color}`}>
-                                      <span className="text-sm">{priority.icon}</span>
-                                      {task.priority}
-                                    </span>
-                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                                      darkMode ? "bg-slate-800/60 text-slate-300" : "bg-slate-100/80 text-slate-700"
-                                    }`}>
-                                      <span>⏰</span>
-                                      {task.dueTime}
-                                    </span>
-                                    {task.routineId && (
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
-                                        darkMode ? "bg-blue-500/20 text-blue-200 border-blue-500/30" : "bg-blue-50 text-blue-700 border-blue-200"
-                                      }`}>
-                                        🔁 Routine
-                                      </span>
-                                    )}
-                                    {isOverdue && (
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
-                                        darkMode ? "bg-red-500/20 text-red-300 border-red-500/40" : "bg-red-100 text-red-700 border-red-200"
-                                      }`}>
-                                        ⚠️ Overdue
-                                      </span>
-                                    )}
-                                  </div>
-                                  
-                                  {expandedTaskIds.includes(task.id) && task.description && (
-                                    <div className={`mt-2 rounded-lg border px-3 py-2 text-xs backdrop-blur-sm ${
-                                      darkMode
-                                        ? "border-slate-700 bg-slate-900/70 text-slate-300"
-                                        : "border-slate-200 bg-white/80 text-slate-700"
-                                    } whitespace-pre-line break-words`}>
-                                      {task.description}
-                                    </div>
-                                  )}
-                                </div>
-                                
-                                <div className="flex gap-2 shrink-0">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleTask(task.id, task.completed);
-                                    }}
-                                    className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all hover:scale-105 active:scale-95 shadow-md hover:shadow-lg ${
-                                      task.completed
-                                        ? "bg-gradient-to-br from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700"
-                                        : "bg-gradient-to-br from-emerald-400 to-emerald-500 text-white hover:from-emerald-500 hover:to-emerald-600"
-                                    }`}
-                                  >
-                                    {task.completed ? "Undo" : "Done"}
-                                  </button>
-                                </div>
-                              </div>
-                            </li>
-                          );
-                        })
-                      )}
-                    </ul>
                   </div>
                 </div>
               </section>
@@ -2889,8 +3160,8 @@ function PageContent() {
             /* ALL TASKS SECTION */
             <div className="space-y-6 animate-fade-in">
               {/* Task Input */}
-              <section className={`rounded-3xl p-6 backdrop-blur-md shadow-lg ${
-                darkMode ? "bg-white/5" : "bg-white/40"
+              <section className={`rounded-2xl p-5 border ${
+                darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
               }`}>
                 <h3 className={`text-lg font-semibold mb-4 ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Add New Task</h3>
                 <div className="space-y-3">
@@ -2898,7 +3169,7 @@ function PageContent() {
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     placeholder="What needs to be done?"
-                    className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                    className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                       darkMode
                         ? "border-slate-700 bg-slate-900/50 text-slate-100"
                         : "border-slate-200 bg-white/70 text-slate-900"
@@ -2909,7 +3180,7 @@ function PageContent() {
                     onChange={(event) => setDescription(event.target.value)}
                     rows={2}
                     placeholder="Add a note (optional)"
-                    className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none ${
+                    className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 resize-none ${
                       darkMode
                         ? "border-slate-700 bg-slate-900/50 text-slate-100"
                         : "border-slate-200 bg-white/70 text-slate-900"
@@ -2923,7 +3194,7 @@ function PageContent() {
                       value={dueDateInput}
                       onChange={(event) => setDueDateInput(event.target.value)}
                       onClick={openAddDatePicker}
-                      className={`w-full rounded-xl border-2 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                      className={`w-full rounded-lg border px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                         darkMode
                           ? "border-slate-700 bg-slate-900/50 text-slate-100"
                           : "border-slate-200 bg-white/70 text-slate-900"
@@ -2942,7 +3213,7 @@ function PageContent() {
                     <select
                       value={priority}
                       onChange={(event) => setPriority(event.target.value as TaskPriority)}
-                      className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                      className={`rounded-lg border px-3 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                         darkMode
                           ? "border-slate-700 bg-slate-900/50 text-slate-100"
                           : "border-slate-200 bg-white/70 text-slate-900"
@@ -2956,7 +3227,7 @@ function PageContent() {
                       type="time"
                       value={dueTimeInput}
                       onChange={(event) => setDueTimeInput(event.target.value)}
-                      className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                      className={`rounded-lg border px-3 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                         darkMode
                           ? "border-slate-700 bg-slate-900/50 text-slate-100"
                           : "border-slate-200 bg-white/70 text-slate-900"
@@ -2964,7 +3235,7 @@ function PageContent() {
                     />
                     <button
                       onClick={addTask}
-                      className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                      className="rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 px-5 py-3 text-sm font-bold text-white transition hover:from-emerald-500 hover:to-emerald-600"
                     >
                       Add
                     </button>
@@ -2973,10 +3244,10 @@ function PageContent() {
               </section>
 
               {/* Filters & Search */}
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+              <section className={`rounded-2xl p-5 border ${
+                darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
               }`}>
-                <div className="grid gap-3 md:grid-cols-[120px_1fr_160px_52px_auto]">
+                <div className="grid gap-3 md:grid-cols-[120px_1fr_160px_52px_auto] sticky top-0 z-10 pb-3 backdrop-blur-sm">
                   <select
                     value={filter}
                     onChange={(event) => setFilter(event.target.value as TaskFilter)}
@@ -3039,13 +3310,21 @@ function PageContent() {
                   </button>
                 </div>
 
+                <div className={`mt-1 hidden md:grid grid-cols-[minmax(0,1fr)_110px_110px_140px] gap-3 px-3 py-2 rounded-md text-[11px] font-semibold uppercase tracking-wider ${
+                  darkMode ? "bg-slate-800/70 text-slate-300" : "bg-slate-100/80 text-slate-600"
+                }`}>
+                  <span>Task</span>
+                  <span>Due</span>
+                  <span>Status</span>
+                  <span className="text-right">Actions</span>
+                </div>
+
                 {/* Tasks List */}
                 <ul className="mt-4 space-y-2 max-h-[50vh] overflow-y-auto pr-1">
                   {loadingTasks ? (
                     <li className={`rounded-lg border-2 border-dashed p-4 text-sm text-center ${
                       darkMode ? "border-slate-700 text-slate-400" : "border-slate-300 text-slate-600"
                     }`}>
-                      <span className="text-xl block mb-2">⏳</span>
                       Getting your tasks ready...
                     </li>
                   ) : sortedTasks.length === 0 ? (
@@ -3064,10 +3343,10 @@ function PageContent() {
                       return (
                       <li
                         key={task.id}
-                        className={`rounded-lg border p-3 backdrop-blur-sm transition ${
+                        className={`rounded-md border p-3 transition ${
                           darkMode
                             ? "bg-slate-900/40 border-slate-700 hover:bg-slate-900/60"
-                            : "bg-white/50 border-slate-200/50 hover:bg-white/70"
+                            : "bg-white/65 border-slate-200/70 hover:bg-white"
                         }`}
                       >
                         {editingTaskId === task.id ? (
@@ -3141,7 +3420,7 @@ function PageContent() {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => saveTaskEdit(task.id)}
-                                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
                               >
                                 Save
                               </button>
@@ -3170,11 +3449,11 @@ function PageContent() {
                               <p className={`text-xs mt-1 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
                                 {formatDisplayDate(task.dueDate)} at {task.dueTime} • <PriorityBadge priority={task.priority} darkMode={darkMode} />
                                 {task.routineId && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                  darkMode ? "bg-blue-500/25 text-blue-200" : "bg-blue-100 text-blue-700"
-                                }`}>🔁 Routine</span>}
+                                  darkMode ? "bg-emerald-500/25 text-emerald-200" : "bg-emerald-100 text-emerald-700"
+                                }`}>Routine</span>}
                                 {isOverdue && <span className={`ml-1.5 px-1.5 py-0.5 rounded text-xs font-semibold ${
                                   darkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700"
-                                }`}>⚠️ Overdue</span>}
+                                }`}>Overdue</span>}
                               </p>
                               {expandedTaskIds.includes(task.id) && task.description && (
                                 <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${
@@ -3229,8 +3508,8 @@ function PageContent() {
             </div>
           ) : activeSection === "analytics" ? (
             /* ANALYTICS SECTION */
-            <section className={`rounded-3xl p-6 backdrop-blur-xl shadow-xl animate-fade-in ${
-              darkMode ? "bg-white/5" : "bg-white/50"
+            <section className={`rounded-2xl p-5 border animate-fade-in ${
+              darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
             }`}>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                 <h3 className={`text-3xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Productivity Insights</h3>
@@ -3239,7 +3518,7 @@ function PageContent() {
                     onClick={() => setAnalyticsView("weekly")}
                     className={`px-3 py-1 rounded text-sm font-medium ${
                       analyticsView === "weekly" || analyticsView === "both"
-                        ? "bg-blue-600 text-white"
+                        ? "bg-emerald-600 text-white"
                         : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-700"
                     }`}
                   >
@@ -3249,7 +3528,7 @@ function PageContent() {
                     onClick={() => setAnalyticsView("monthly")}
                     className={`px-3 py-1 rounded text-sm font-medium ${
                       analyticsView === "monthly" || analyticsView === "both"
-                        ? "bg-blue-600 text-white"
+                        ? "bg-emerald-600 text-white"
                         : darkMode ? "bg-slate-700 text-slate-300" : "bg-slate-200 text-slate-700"
                     }`}
                   >
@@ -3318,19 +3597,19 @@ function PageContent() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <div className={`rounded-xl shadow-md p-4 ${darkMode ? "bg-slate-900/40" : "bg-white/70"}`}>
+                <div className={`rounded-lg border p-4 ${darkMode ? "bg-slate-900/40 border-slate-700" : "bg-white/70 border-slate-200"}`}>
                   <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Total Tasks</p>
                   <p className={`mt-1 text-2xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.totalTasks}</p>
                 </div>
-                <div className={`rounded-xl shadow-md p-4 ${darkMode ? "bg-slate-900/40" : "bg-white/70"}`}>
+                <div className={`rounded-lg border p-4 ${darkMode ? "bg-slate-900/40 border-slate-700" : "bg-white/70 border-slate-200"}`}>
                   <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Completed</p>
                   <p className={`mt-1 text-2xl font-bold text-emerald-600`}>{analytics.completedTasks}</p>
                 </div>
-                <div className={`rounded-xl shadow-md p-4 ${darkMode ? "bg-slate-900/40" : "bg-white/70"}`}>
+                <div className={`rounded-lg border p-4 ${darkMode ? "bg-slate-900/40 border-slate-700" : "bg-white/70 border-slate-200"}`}>
                   <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Completion Rate</p>
                   <p className={`mt-1 text-2xl font-bold ${darkMode ? "text-slate-100" : "text-slate-900"}`}>{analytics.completionRate}%</p>
                 </div>
-                <div className={`rounded-xl shadow-md p-4 ${darkMode ? "bg-slate-900/40" : "bg-white/70"}`}>
+                <div className={`rounded-lg border p-4 ${darkMode ? "bg-slate-900/40 border-slate-700" : "bg-white/70 border-slate-200"}`}>
                   <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Productivity Score</p>
                   <p className={`mt-1 text-2xl font-bold ${
                     analytics.productivityScore >= 75 ? "text-emerald-600" :
@@ -3343,14 +3622,14 @@ function PageContent() {
                 {(analyticsView === "weekly" || analyticsView === "both") && (
                   <div className={`rounded-xl border p-4 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
                     <p className={`font-bold mb-2 ${darkMode ? "text-slate-200" : "text-slate-800"}`}>Last 7 Days Completion</p>
-                    <p className={`text-3xl font-bold text-blue-600`}>{analytics.last7CompletionRate}%</p>
+                    <p className={`text-3xl font-bold text-emerald-600`}>{analytics.last7CompletionRate}%</p>
                     <p className={`text-xs mt-2 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Tasks due in the last 7 days</p>
                   </div>
                 )}
                 {(analyticsView === "monthly" || analyticsView === "both") && (
                   <div className={`rounded-xl border p-4 ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/60"}`}>
                     <p className={`font-bold mb-2 ${darkMode ? "text-slate-200" : "text-slate-800"}`}>This Month</p>
-                    <p className={`text-3xl font-bold text-purple-600`}>{monthlyAnalytics.completionRate}%</p>
+                    <p className={`text-3xl font-bold text-teal-600`}>{monthlyAnalytics.completionRate}%</p>
                     <p className={`text-xs mt-2 ${darkMode ? "text-slate-400" : "text-slate-600"}`}>{monthlyAnalytics.completed} of {monthlyAnalytics.total} tasks done</p>
                   </div>
                 )}
@@ -3383,7 +3662,7 @@ function PageContent() {
                       style={{
                         background: `conic-gradient(
                           #10b981 0% ${chartDistribution.completedPct}%,
-                          #3b82f6 ${chartDistribution.completedPct}% ${chartDistribution.completedPct + chartDistribution.upcomingPct}%,
+                          #14b8a6 ${chartDistribution.completedPct}% ${chartDistribution.completedPct + chartDistribution.upcomingPct}%,
                           #ef4444 ${chartDistribution.completedPct + chartDistribution.upcomingPct}% 100%
                         )`,
                       }}
@@ -3392,7 +3671,7 @@ function PageContent() {
                     </div>
                     <div className="space-y-2 text-sm">
                       <p className={`${darkMode ? "text-slate-300" : "text-slate-700"}`}><span className="font-semibold text-emerald-500">● Completed:</span> {chartDistribution.completedPct}%</p>
-                      <p className={`${darkMode ? "text-slate-300" : "text-slate-700"}`}><span className="font-semibold text-blue-500">● Upcoming:</span> {chartDistribution.upcomingPct}%</p>
+                      <p className={`${darkMode ? "text-slate-300" : "text-slate-700"}`}><span className="font-semibold text-teal-500">● Upcoming:</span> {chartDistribution.upcomingPct}%</p>
                       <p className={`${darkMode ? "text-slate-300" : "text-slate-700"}`}><span className="font-semibold text-red-500">● Overdue:</span> {chartDistribution.overduePct}%</p>
                       <p className={`text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>Based on {chartDistribution.total} tasks</p>
                     </div>
@@ -3409,7 +3688,7 @@ function PageContent() {
                         <div key={day.key} className="flex flex-col items-center gap-1">
                           <div className={`relative h-28 w-5 rounded-md ${darkMode ? "bg-slate-800" : "bg-slate-200"}`}>
                             <div
-                              className={`absolute bottom-0 left-0 w-full rounded-md ${darkMode ? "bg-blue-500/70" : "bg-blue-400/70"} ${chartAnimated ? "transition-all duration-700" : ""}`}
+                              className={`absolute bottom-0 left-0 w-full rounded-md ${darkMode ? "bg-teal-500/70" : "bg-teal-400/70"} ${chartAnimated ? "transition-all duration-700" : ""}`}
                               style={{ height: `${Math.max(totalHeight, day.total > 0 ? 6 : 0)}%` }}
                             />
                             <div
@@ -3423,7 +3702,7 @@ function PageContent() {
                     })}
                   </div>
                   <p className={`mt-2 text-xs ${darkMode ? "text-slate-400" : "text-slate-600"}`}>
-                    Green = completed, Blue = total tasks due each day.
+                    Green = completed, Teal = total tasks due each day.
                   </p>
                 </div>
               </div>
@@ -3432,8 +3711,8 @@ function PageContent() {
             /* ROUTINE SECTION */
             <div className="space-y-6 animate-fade-in">
                 {/* Add Routine Form */}
-                <section className={`rounded-3xl p-6 backdrop-blur-md shadow-lg ${
-                  darkMode ? "bg-white/5" : "bg-white/40"
+                <section className={`rounded-2xl p-5 border ${
+                  darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
                 }`}>
                   <h3 className={`text-lg font-semibold mb-4 ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Add New Routine</h3>
                   <div className="space-y-3">
@@ -3441,7 +3720,7 @@ function PageContent() {
                       value={routineTitle}
                       onChange={(e) => setRoutineTitle(e.target.value)}
                       placeholder="Routine title"
-                      className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                      className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                         darkMode
                           ? "border-slate-700 bg-slate-900/50 text-slate-100"
                           : "border-slate-200 bg-white/70 text-slate-900"
@@ -3452,7 +3731,7 @@ function PageContent() {
                       onChange={(e) => setRoutineDescription(e.target.value)}
                       rows={2}
                       placeholder="Description (optional)"
-                      className={`w-full rounded-xl border-2 px-4 py-3 placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 resize-none ${
+                      className={`w-full rounded-lg border px-4 py-3 placeholder-slate-500 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 resize-none ${
                         darkMode
                           ? "border-slate-700 bg-slate-900/50 text-slate-100"
                           : "border-slate-200 bg-white/70 text-slate-900"
@@ -3462,7 +3741,7 @@ function PageContent() {
                       <select
                         value={routineDayOfWeek}
                         onChange={(e) => setRoutineDayOfWeek(Number(e.target.value))}
-                        className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                        className={`rounded-lg border px-3 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                           darkMode
                             ? "border-slate-700 bg-slate-900/50 text-slate-100"
                             : "border-slate-200 bg-white/70 text-slate-900"
@@ -3480,7 +3759,7 @@ function PageContent() {
                       <select
                         value={routinePriority}
                         onChange={(e) => setRoutinePriority(e.target.value as TaskPriority)}
-                        className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                        className={`rounded-lg border px-3 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                           darkMode
                             ? "border-slate-700 bg-slate-900/50 text-slate-100"
                             : "border-slate-200 bg-white/70 text-slate-900"
@@ -3494,7 +3773,7 @@ function PageContent() {
                         type="time"
                         value={routineTime}
                         onChange={(e) => setRoutineTime(e.target.value)}
-                        className={`rounded-xl border-2 px-3 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200 ${
+                        className={`rounded-lg border px-3 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 ${
                           darkMode
                             ? "border-slate-700 bg-slate-900/50 text-slate-100"
                             : "border-slate-200 bg-white/70 text-slate-900"
@@ -3502,7 +3781,7 @@ function PageContent() {
                       />
                       <button
                         onClick={addRoutine}
-                        className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:shadow-xl hover:scale-[1.02] active:scale-[0.98]"
+                        className="rounded-lg bg-gradient-to-r from-emerald-600 to-emerald-700 px-5 py-3 text-sm font-bold text-white transition hover:from-emerald-500 hover:to-emerald-600"
                       >
                         Add
                       </button>
@@ -3511,23 +3790,41 @@ function PageContent() {
                 </section>
 
                 {/* Routines List */}
-                <section className={`rounded-3xl p-6 backdrop-blur-xl shadow-xl ${
-                  darkMode ? "bg-white/5" : "bg-white/50"
+                <section className={`rounded-2xl p-5 border ${
+                  darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
                 }`}>
+                  <div className="mb-4 overflow-x-auto">
+                    <div className="inline-flex min-w-full gap-2">
+                      {routinePlannerTabs.map((tab) => (
+                        <button
+                          key={String(tab.key)}
+                          onClick={() => setRoutinePlannerDay(tab.key)}
+                          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                            routinePlannerDay === tab.key
+                              ? "bg-emerald-600 text-white"
+                              : darkMode
+                                ? "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <h3 className={`text-2xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Your Routines</h3>
                   {loadingRoutines ? (
                     <p className={`text-sm text-center py-4 ${
                       darkMode ? "text-slate-400" : "text-slate-600"
                     }`}>
-                      <span className="text-xl block mb-2">⏳</span>
                       Loading your routines...
                     </p>
                   ) : (
                     <div className="space-y-4">
                       {/* Daily Routines */}
-                      {routines.filter(r => r.dayOfWeek === 7).length > 0 && (
+                      {(routinePlannerDay === "all" || routinePlannerDay === 7) && routines.filter(r => r.dayOfWeek === 7).length > 0 && (
                         <div>
-                          <h4 className={`font-semibold mb-2 ${darkMode ? "text-slate-200" : "text-slate-800"}`}>🔁 Daily</h4>
+                          <h4 className={`font-semibold mb-2 ${darkMode ? "text-slate-200" : "text-slate-800"}`}>Daily</h4>
                           <div className="space-y-2">
                             {routines
                               .filter(r => r.dayOfWeek === 7)
@@ -3611,7 +3908,7 @@ function PageContent() {
                                       <div className="flex gap-2">
                                         <button
                                           onClick={() => saveRoutineEdit(routine.id)}
-                                          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                                          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
                                         >
                                           Save
                                         </button>
@@ -3697,14 +3994,15 @@ function PageContent() {
                         { day: 4, name: "Thursday", emoji: "⚡" },
                         { day: 5, name: "Friday", emoji: "🎉" },
                         { day: 6, name: "Saturday", emoji: "⭐" },
-                      ].map(({ day, name, emoji }) => {
+                      ].filter(({ day }) => routinePlannerDay === "all" || routinePlannerDay === day).map(({ day, name, emoji }) => {
                         const dayRoutines = routines.filter(r => r.dayOfWeek === day);
                         if (dayRoutines.length === 0) return null;
 
                         return (
                           <div key={day}>
                             <h4 className={`font-semibold mb-2 ${darkMode ? "text-slate-200" : "text-slate-800"}`}>
-                              {emoji} {name}
+                              <span className="mr-1.5 opacity-80">{emoji}</span>
+                              {name}
                             </h4>
                             <div className="space-y-2">
                               {dayRoutines
@@ -3788,7 +4086,7 @@ function PageContent() {
                                         <div className="flex gap-2">
                                           <button
                                             onClick={() => saveRoutineEdit(routine.id)}
-                                            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition"
+                                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition"
                                           >
                                             Save
                                           </button>
@@ -3884,16 +4182,16 @@ function PageContent() {
           ) : activeSection === "help" ? (
             /* HELP & GUIDE SECTION */
             <div className="space-y-6 animate-fade-in">
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
+              <section className={`rounded-2xl p-5 border ${
+                darkMode ? "bg-slate-900/52 border-white/10" : "bg-white/72 border-slate-200/80"
               }`}>
                 <h2 className={`text-3xl font-bold mb-6 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Help & User Guide</h2>
                 
                 {/* Getting Started */}
                 <div className="mb-8">
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>🚀 Getting Started</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Getting Started</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Add a task:</strong> Go to "All Tasks" and enter a task title, description (optional), due date, time, and priority.
@@ -3912,15 +4210,15 @@ function PageContent() {
 
                 {/* Routines */}
                 <div className="mb-8">
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>🔁 Weekly Routines</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Weekly Routines</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Create routines:</strong> Go to "Routine" and add a daily habit. Choose "Daily" for every day, or a specific day (Mon–Sun).
                     </p>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      <strong>Routine tasks appear automatically:</strong> On matching days, your routines show in "Today's Tasks" with a 🔁 badge.
+                      <strong>Routine tasks appear automatically:</strong> On matching days, your routines show in "Today's Tasks" with a routine badge.
                     </p>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Track habit adherence:</strong> See your weekly and monthly routine completion % in "Routine Adherence" cards (separate from task completion).
@@ -3933,9 +4231,9 @@ function PageContent() {
 
                 {/* Calendar & Analytics */}
                 <div className="mb-8">
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>📊 Calendar & Analytics</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Calendar & Analytics</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Mini calendar:</strong> The calendar in "Today" shows ◆ dots on dates with tasks. Click any date to view that day's tasks.
@@ -3951,9 +4249,9 @@ function PageContent() {
 
                 {/* Guest vs Account */}
                 <div className="mb-8">
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>👤 Guest vs Account Mode</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Guest vs Account Mode</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Guest mode:</strong> Your tasks and routines are saved in your browser only. No login required; perfect for quick starts.
@@ -3969,24 +4267,24 @@ function PageContent() {
 
                 {/* Offline Support */}
                 <div className="mb-8">
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>📴 Offline & App Installation</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Offline & App Installation</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       <strong>Works offline:</strong> Tasks sync when your internet returns. Changes made offline are queued and sent automatically.
                     </p>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
-                      <strong>Install as app:</strong> Click "📱 Install App" to use TASKFLOW like a native app on mobile or desktop.
+                      <strong>Install as app:</strong> Click "Install App" to use TASKFLOW like a native app on mobile or desktop.
                     </p>
                   </div>
                 </div>
 
                 {/* Tips */}
                 <div>
-                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>💡 Quick Tips</h3>
-                  <div className={`rounded-lg border p-4 space-y-2 ${
-                    darkMode ? "border-slate-700 bg-slate-900/40" : "border-slate-200 bg-white/50"
+                  <h3 className={`text-xl font-bold mb-3 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Quick Tips</h3>
+                  <div className={`pl-4 border-l-2 space-y-2 ${
+                    darkMode ? "border-slate-600" : "border-slate-300"
                   }`}>
                     <p className={`text-sm ${darkMode ? "text-slate-300" : "text-slate-700"}`}>
                       • Use task descriptions (notes) for details that don't fit in the title.
@@ -4021,7 +4319,7 @@ function PageContent() {
                       <button
                         onClick={importGuestTasksToAccount}
                         disabled={guestUpgradeLoading}
-                        className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+                        className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50"
                       >
                         {guestUpgradeLoading ? "Importing..." : "Import Data"}
                       </button>
@@ -4048,173 +4346,132 @@ function PageContent() {
               )}
 
               {/* Profile Section */}
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
-              }`}>
+              <WorkspacePanel darkMode={darkMode}>
                 <h3 className={`text-xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Profile</h3>
                 <div className="space-y-3">
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Full Name</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       value={profileName}
                       onChange={(e) => setProfileName(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Date of Birth (Optional)</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="date"
                       value={profileDateOfBirth}
                       onChange={(e) => setProfileDateOfBirth(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
-                  <button
+                  <PrimaryButton
                     onClick={saveProfile}
                     disabled={profileLoading}
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     {profileLoading ? "Saving..." : "Save Profile"}
-                  </button>
+                  </PrimaryButton>
                   {profileMessage && <AlertMessage message={profileMessage} />}
                 </div>
-              </section>
+              </WorkspacePanel>
 
               {/* Email Section */}
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
-              }`}>
+              <WorkspacePanel darkMode={darkMode}>
                 <h3 className={`text-xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Change Email</h3>
                 <div className="space-y-3">
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>New Email</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="email"
                       value={newEmailInput}
                       onChange={(e) => setNewEmailInput(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Current Password</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="password"
                       value={emailPassword}
                       onChange={(e) => setEmailPassword(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
-                  <button
+                  <PrimaryButton
                     onClick={changeEmail}
                     disabled={emailLoading}
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     {emailLoading ? "Updating..." : "Change Email"}
-                  </button>
+                  </PrimaryButton>
                   {emailMessage && <AlertMessage message={emailMessage} />}
                 </div>
-              </section>
+              </WorkspacePanel>
 
               {/* Password Section */}
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
-              }`}>
+              <WorkspacePanel darkMode={darkMode}>
                 <h3 className={`text-xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Change Password</h3>
                 <div className="space-y-3">
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Current Password</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="password"
                       value={currentPasswordInput}
                       onChange={(e) => setCurrentPasswordInput(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>New Password (min 6 chars)</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="password"
                       value={newPasswordInput}
                       onChange={(e) => setNewPasswordInput(e.target.value)}
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
-                  <button
+                  <PrimaryButton
                     onClick={changePassword}
                     disabled={passwordLoading}
-                    className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
                   >
                     {passwordLoading ? "Updating..." : "Change Password"}
-                  </button>
+                  </PrimaryButton>
                   {passwordMessage && <AlertMessage message={passwordMessage} />}
                 </div>
-              </section>
+              </WorkspacePanel>
 
               {/* Export & Delete Section */}
-              <section className={`rounded-3xl p-6 backdrop-blur-xl border shadow-xl ${
-                darkMode ? "bg-white/10 border-white/20" : "bg-white/55 border-white/70"
-              }`}>
+              <WorkspacePanel darkMode={darkMode}>
                 <h3 className={`text-xl font-bold mb-4 ${darkMode ? "text-slate-100" : "text-slate-900"}`}>Data Management</h3>
                 <div className="space-y-3">
-                  <button
+                  <PrimaryButton
                     onClick={() => void exportAccountData(today)}
-                    className="w-full bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-emerald-700"
                   >
-                    📥 Export All Tasks
-                  </button>
+                    Export All Tasks
+                  </PrimaryButton>
                   <div>
                     <label className={`text-sm font-medium ${darkMode ? "text-slate-300" : "text-slate-700"}`}>Delete Account - Enter Password</label>
-                    <input
+                    <FieldInput
+                      darkMode={darkMode}
                       type="password"
                       value={deletePasswordInput}
                       onChange={(e) => setDeletePasswordInput(e.target.value)}
                       placeholder="Confirm password to delete account"
-                      className={`w-full mt-1 rounded-lg border px-3 py-2 outline-none transition focus:border-blue-500 ${
-                        darkMode
-                          ? "border-slate-700 bg-slate-900/50 text-slate-100"
-                          : "border-slate-200 bg-white/70 text-slate-900"
-                      }`}
                     />
                   </div>
-                  <button
+                  <DangerButton
                     onClick={openDeleteAccountDialog}
                     disabled={deleteLoading || deleteAccountBusy}
-                    className="w-full bg-red-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50"
                   >
-                    {deleteLoading || deleteAccountBusy ? "Deleting..." : "🗑️ Delete Account Permanently"}
-                  </button>
+                    {deleteLoading || deleteAccountBusy ? "Deleting..." : "Delete Account Permanently"}
+                  </DangerButton>
                   {deleteMessage && <AlertMessage message={deleteMessage} successKeyword="deleted" />}
                 </div>
-              </section>
+              </WorkspacePanel>
             </div>
           ) : (
-            <div className={`rounded-2xl p-6 backdrop-blur-md border shadow-lg text-center ${
-              darkMode ? "bg-white/10 border-white/20 text-slate-300" : "bg-white/40 border-white/50 text-slate-700"
+            <div className={`rounded-xl p-5 border text-center ${
+              darkMode ? "bg-slate-900/52 border-white/10 text-slate-300" : "bg-white/72 border-slate-200/80 text-slate-700"
             }`}>
               Please sign in to access Account settings.
             </div>

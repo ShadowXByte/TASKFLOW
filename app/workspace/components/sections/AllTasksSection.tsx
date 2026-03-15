@@ -51,8 +51,8 @@ export function AllTasksSection({
   };
 
   return (
-    <div className={`space-y-6 rounded-3xl p-8 ${
-      darkMode ? 'bg-gradient-to-br from-slate-900 to-slate-800' : 'bg-gradient-to-br from-slate-50 to-white'
+    <div className={`space-y-5 rounded-xl border p-6 ${
+      darkMode ? 'bg-slate-900/55 border-slate-700/60' : 'bg-white/72 border-slate-200/80'
     }`}>
       <div>
         <h2 className={`text-3xl font-bold mb-2 ${darkMode ? 'text-slate-100' : 'text-slate-900'}`}>
@@ -70,10 +70,10 @@ export function AllTasksSection({
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
               filter === f
-                ? darkMode ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
-                : darkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                ? darkMode ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white'
+                : darkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -87,7 +87,7 @@ export function AllTasksSection({
             🎯 No tasks here yet. Add one above!
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {filteredTasks.map((task) => (
               <div key={task.id}>
                 <TaskCard
