@@ -1462,6 +1462,16 @@ function PageContent() {
   // Note: naming is inconsistent here - toggleTask vs addTask vs removeTask
   // Should probably standardize to handleX pattern but it works
   const toggleTask = async (id: number, completed: boolean) => {
+    const applyCompletionLocally = (nextCompleted: boolean) => {
+      setTasks((current) => {
+        const nextTasks = current.map((task) => (task.id === id ? { ...task, completed: nextCompleted } : task));
+        if (workspaceMode === "account") {
+          writeAccountCachedTasks(nextTasks);
+        }
+        return nextTasks;
+      });
+    };
+
     // Handle routine-generated tasks without creating persisted duplicates
     if (id < 0) {
       // Find the routine task
@@ -1493,11 +1503,8 @@ function PageContent() {
     // Optimistic update - feels snappier to users
     if (isOffline) {
       console.log("[OFFLINE] Toggling task", id, "offline");
-      const updatedTasks = tasks.map((task) => (task.id === id ? { ...task, completed: !completed } : task));
-      setTasks(updatedTasks);
+      applyCompletionLocally(!completed);
       pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
-      // Immediately write to cache to persist offline changes
-      writeAccountCachedTasks(updatedTasks);
       console.log("[OFFLINE] Task toggled and cached");
       return;
     }
@@ -1514,9 +1521,13 @@ function PageContent() {
       }
 
       const updated = (await response.json()) as Task;
-      setTasks((current) => current.map((task) => (task.id === id ? updated : task)));
+      setTasks((current) => {
+        const nextTasks = current.map((task) => (task.id === id ? updated : task));
+        writeAccountCachedTasks(nextTasks);
+        return nextTasks;
+      });
     } catch {
-      setTasks((current) => current.map((task) => (task.id === id ? { ...task, completed: !completed } : task)));
+      applyCompletionLocally(!completed);
       pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
     }
   };
