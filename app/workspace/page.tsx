@@ -1474,8 +1474,10 @@ function PageContent() {
 
     const nextCompleted = !completed;
 
-    // Handle routine-generated tasks without creating persisted duplicates
-    if (id < 0) {
+    // Handle routine-generated synthetic tasks (negative IDs not present in persisted/queued task state).
+    // Offline-created normal tasks also use temporary negative IDs, so they must continue through normal toggle flow.
+    const isPersistedOrQueuedTask = tasks.some((task) => task.id === id);
+    if (id < 0 && !isPersistedOrQueuedTask) {
       // Find the routine task
       const routineTasksList = generateRoutineTasksForDate(selectedDate, routines);
       const routineTask = routineTasksList.find(t => t.id === id);
