@@ -1472,6 +1472,8 @@ function PageContent() {
       });
     };
 
+    const nextCompleted = !completed;
+
     // Handle routine-generated tasks without creating persisted duplicates
     if (id < 0) {
       // Find the routine task
@@ -1493,18 +1495,20 @@ function PageContent() {
 
     if (workspaceMode === "guest") {
       const nextTasks = tasks.map((task) =>
-        task.id === id ? { ...task, completed: !completed } : task,
+        task.id === id ? { ...task, completed: nextCompleted } : task,
       );
       setTasks(nextTasks);
       writeGuestTasks(nextTasks);
       return;
     }
 
-    // Optimistic update - feels snappier to users
+    // Optimistic-first for account mode so Done always responds immediately,
+    // even when navigator.onLine is stale or the request is slow.
+    applyCompletionLocally(nextCompleted);
+
     if (isOffline) {
       console.log("[OFFLINE] Toggling task", id, "offline");
-      applyCompletionLocally(!completed);
-      pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
+      pushPendingAccountOp({ type: "update", id, changes: { completed: nextCompleted } });
       console.log("[OFFLINE] Task toggled and cached");
       return;
     }
@@ -1513,7 +1517,7 @@ function PageContent() {
       const response = await fetch(`/api/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: !completed }),
+        body: JSON.stringify({ completed: nextCompleted }),
       });
 
       if (!response.ok) {
@@ -1527,8 +1531,8 @@ function PageContent() {
         return nextTasks;
       });
     } catch {
-      applyCompletionLocally(!completed);
-      pushPendingAccountOp({ type: "update", id, changes: { completed: !completed } });
+      // Keep optimistic state and queue for retry if server call fails.
+      pushPendingAccountOp({ type: "update", id, changes: { completed: nextCompleted } });
     }
   };
 
